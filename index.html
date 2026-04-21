@@ -527,20 +527,26 @@ function renderMainChart() {
     return d.forecast ? c + '80' : c;
   });
 
-  const ctx = document.getElementById('mainChart').getContext('2d');
-  
   // Destroy previous chart instance if it exists
   if (CHART_INSTANCE) {
     CHART_INSTANCE.destroy();
     CHART_INSTANCE = null;
   }
   
-  // Reset canvas completely
-  const canvas = document.getElementById('mainChart');
-  canvas.width = canvas.width; // Reset canvas
-  const freshCtx = canvas.getContext('2d');
+  // Remove and recreate canvas to fully reset Chart.js state
+  const chartWrap = document.querySelector('.chart-wrap');
+  const oldCanvas = document.getElementById('mainChart');
+  if (oldCanvas) {
+    oldCanvas.remove();
+  }
   
-  CHART_INSTANCE = new Chart(freshCtx, {
+  const newCanvas = document.createElement('canvas');
+  newCanvas.id = 'mainChart';
+  chartWrap.appendChild(newCanvas);
+  
+  const ctx = newCanvas.getContext('2d');
+  
+  CHART_INSTANCE = new Chart(ctx, {
     type: 'bar',
     data: {
       datasets: [
