@@ -1,0 +1,16 @@
+# Ensure correct MIME types for bundled JS libraries on InfinityFree / Apache hosts
+AddType application/javascript .js
+AddType text/css .css
+
+# Allow all assets to be served
+<FilesMatch "\.(js|css|html|htm)$">
+    Header set Access-Control-Allow-Origin "*"
+</FilesMatch>
+
+# Directory index fallback
+DirectoryIndex index.html dashboard.html
+
+# Cache vendor libs for a week
+<FilesMatch "\.(js|css)$">
+    Header set Cache-Control "public, max-age=604800"
+</FilesMatch>
