@@ -1,998 +1,250 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Chisinau Meteo-Sensitivity Dashboard</title>
-<script src="vendor/chart.umd.min.js" onerror="window.__cdnErr=(window.__cdnErr||[]).concat('chart.umd.min.js')"></script>
-<script src="vendor/chartjs-adapter-date-fns.bundle.min.js" onerror="window.__cdnErr=(window.__cdnErr||[]).concat('date-fns adapter')"></script>
-<script src="vendor/chartjs-plugin-annotation.min.js" onerror="window.__cdnErr=(window.__cdnErr||[]).concat('annotation plugin')"></script>
-<style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-    background: linear-gradient(135deg, #0f1729 0%, #1a2744 50%, #2a3f5f 100%);
-    color: #e4e8f1;
-    min-height: 100vh;
-    padding: 20px;
-  }
-  .container { max-width: 1400px; margin: 0 auto; }
-  header {
-    text-align: center;
-    padding: 24px 20px;
-    margin-bottom: 24px;
-    background: rgba(255,255,255,0.04);
-    border-radius: 16px;
-    border: 1px solid rgba(255,255,255,0.08);
-    backdrop-filter: blur(10px);
-  }
-  header h1 {
-    font-size: 2rem;
-    font-weight: 700;
-    background: linear-gradient(90deg, #64b5f6, #ba68c8);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    margin-bottom: 8px;
-  }
-  header .subtitle { color: #9aa5b8; font-size: 0.95rem; }
-  header .location { font-size: 1.05rem; color: #c5cde0; margin-top: 4px; }
-  .today-date {
-    display: inline-block;
-    background: rgba(100,181,246,0.15);
-    padding: 6px 14px;
-    border-radius: 20px;
-    margin-top: 12px;
-    font-weight: 600;
-    color: #64b5f6;
-    border: 1px solid rgba(100,181,246,0.3);
-  }
-  .status-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-    gap: 16px;
-    margin-bottom: 24px;
-  }
-  .status-card {
-    background: rgba(255,255,255,0.05);
-    border: 1px solid rgba(255,255,255,0.1);
-    border-radius: 14px;
-    padding: 20px;
-    backdrop-filter: blur(10px);
-    transition: transform 0.2s;
-  }
-  .status-card:hover { transform: translateY(-2px); }
-  .status-card .label { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 1px; color: #9aa5b8; margin-bottom: 8px; }
-  .status-card .value { font-size: 2.2rem; font-weight: 700; margin-bottom: 4px; }
-  .status-card .unit { font-size: 0.9rem; color: #9aa5b8; }
-  .status-card .detail { font-size: 0.85rem; color: #c5cde0; margin-top: 8px; }
-  .status-card.alert-high { border-color: #ef5350; background: rgba(239,83,80,0.12); }
-  .status-card.alert-mid { border-color: #ffa726; background: rgba(255,167,38,0.10); }
-  .status-card.alert-low { border-color: #66bb6a; background: rgba(102,187,106,0.08); }
-
-  .panel {
-    background: rgba(255,255,255,0.04);
-    border: 1px solid rgba(255,255,255,0.08);
-    border-radius: 16px;
-    padding: 24px;
-    margin-bottom: 24px;
-    backdrop-filter: blur(10px);
-  }
-  .panel h2 {
-    font-size: 1.25rem;
-    margin-bottom: 16px;
-    color: #e4e8f1;
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-  .panel h2::before {
-    content: '';
-    width: 4px;
-    height: 22px;
-    background: linear-gradient(180deg, #64b5f6, #ba68c8);
-    border-radius: 2px;
-  }
-  .chart-wrap {
-    position: relative;
-    height: 420px;
-    background: rgba(0,0,0,0.15);
-    border-radius: 10px;
-    padding: 12px;
-  }
-
-  .alerts-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 20px;
-  }
-  @media (max-width: 900px) { .alerts-grid { grid-template-columns: 1fr; } }
-  .alert-item {
-    padding: 14px 16px;
-    border-radius: 10px;
-    margin-bottom: 10px;
-    border-left: 4px solid;
-    background: rgba(0,0,0,0.2);
-  }
-  .alert-item.critical { border-color: #ef5350; }
-  .alert-item.warning { border-color: #ffa726; }
-  .alert-item.info { border-color: #42a5f5; }
-  .alert-item.ok { border-color: #66bb6a; }
-  .alert-item .alert-title { font-weight: 600; margin-bottom: 4px; font-size: 0.95rem; }
-  .alert-item .alert-time { font-size: 0.78rem; color: #9aa5b8; margin-bottom: 6px; }
-  .alert-item .alert-body { font-size: 0.88rem; color: #c5cde0; line-height: 1.5; }
-
-  .recommendations ul { list-style: none; }
-  .recommendations li {
-    padding: 10px 0 10px 28px;
-    position: relative;
-    border-bottom: 1px solid rgba(255,255,255,0.06);
-    font-size: 0.92rem;
-    line-height: 1.5;
-    color: #d0d7e6;
-  }
-  .recommendations li:last-child { border-bottom: none; }
-  .recommendations li::before {
-    content: '✓';
-    position: absolute;
-    left: 4px;
-    top: 10px;
-    color: #66bb6a;
-    font-weight: bold;
-  }
-  .recommendations li.warn::before { content: '⚠'; color: #ffa726; }
-  .recommendations li.danger::before { content: '✗'; color: #ef5350; }
-
-  .kp-scale {
-    display: flex;
-    gap: 4px;
-    margin-top: 14px;
-    flex-wrap: wrap;
-  }
-  .kp-scale-item {
-    flex: 1;
-    min-width: 80px;
-    padding: 6px 8px;
-    border-radius: 6px;
-    text-align: center;
-    font-size: 0.72rem;
-    color: #fff;
-  }
-
-  footer {
-    text-align: center;
-    color: #7a8499;
-    font-size: 0.8rem;
-    padding: 20px;
-    margin-top: 20px;
-  }
-  footer a { color: #64b5f6; text-decoration: none; }
-  #loading { text-align: center; padding: 40px; color: #9aa5b8; }
-  #loading .spinner {
-    border: 3px solid rgba(255,255,255,0.1);
-    border-top-color: #64b5f6;
-    border-radius: 50%;
-    width: 40px;
-    height: 40px;
-    animation: spin 1s linear infinite;
-    margin: 0 auto 16px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MeteoGuard Chișinău (Live)</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+    </style>
 </head>
-<body>
-<div class="container">
+<body class="bg-gray-900 text-gray-100 font-sans p-4 md:p-8">
 
-  <header>
-    <h1>Meteo-Sensitivity Dashboard</h1>
-    <div class="location">📍 Chișinău, Moldova (47.01°N, 28.86°E)</div>
-    <div class="subtitle">Geomagnetic storms & atmospheric pressure monitoring</div>
-    <div class="today-date" id="todayDate">Today</div>
-    <div style="margin-top:12px; font-size:0.85rem; color:#9aa5b8;">
-      <span id="dataStatus">Loading...</span>
-      <button id="refreshBtn" style="margin-left:12px; padding:4px 12px; background:#64b5f6; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85rem; font-weight:600;">🔄 Refresh</button>
+    <div class="max-w-6xl mx-auto">
+        <header class="mb-8 border-b border-gray-700 pb-4">
+            <h1 class="text-3xl font-bold flex items-center gap-3">
+                🌤️ MeteoGuard Chișinău <span class="text-xs bg-green-600 text-white px-2 py-1 rounded-full ml-2 animate-pulse">LIVE DATA</span>
+            </h1>
+            <p class="text-gray-400 mt-2">Текущая дата: <span id="currentDate" class="font-semibold text-white">Обновление...</span></p>
+        </header>
+
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📢 Текущий статус (Online)</h2>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="statusCards" style="opacity: 0.5;">
+            
+            <div id="kpCard" class="bg-gray-800 rounded-lg p-5 shadow-lg transition-colors duration-500">
+                <div class="flex items-center gap-2 text-blue-400 mb-2">
+                    <span class="text-xl">🧲</span> <h3 class="font-semibold">Магнитная буря (Max за сегодня):</h3>
+                </div>
+                <p id="kpValue" class="text-4xl font-bold text-white mb-1">-- Kp</p>
+                <p id="kpDesc" class="text-sm text-gray-400 italic">Загрузка...</p>
+            </div>
+
+            <div class="bg-gray-800 rounded-lg p-5 border-l-4 border-blue-500 shadow-lg">
+                <div class="flex items-center gap-2 text-blue-400 mb-2">
+                    <span class="text-xl">🌡️</span> <h3 class="font-semibold">Давление (Ср. за сегодня):</h3>
+                </div>
+                <p id="pressureValue" class="text-4xl font-bold text-white mb-1">-- мм</p>
+                <p id="pressureDesc" class="text-sm text-gray-400 italic">Загрузка...</p>
+            </div>
+
+            <div id="alertCard" class="bg-gray-800 border border-gray-600 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500">
+                <div id="alertLine" class="absolute top-0 left-0 w-full h-1 bg-gray-500"></div>
+                <h3 id="alertTitle" class="text-gray-300 font-bold text-lg mb-2 flex items-center gap-2">
+                    ⏳ Анализ данных...
+                </h3>
+                <p id="alertText" class="text-sm text-gray-400 leading-relaxed">
+                    Подключение к серверам NOAA и Open-Meteo. Пожалуйста, подождите.
+                </p>
+            </div>
+
+        </div>
+
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📈 Динамика: Неделя до и Неделя после (Прогноз)</h2>
+        <div class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700 relative">
+            <div id="loadingOverlay" class="absolute inset-0 bg-gray-800 z-10 flex items-center justify-center text-xl text-blue-400 font-bold">
+                Скачивание данных из сети...
+            </div>
+            <div id="meteoChart" style="width: 100%; height: 450px;"></div>
+        </div>
+
     </div>
-  </header>
 
-  <div id="loading"><div class="spinner"></div>Loading data from NOAA & Open-Meteo...</div>
+    <script>
+        async function fetchAndRenderData() {
+            try {
+                // --- 1. Дата интерфейса ---
+                const todayObj = new Date();
+                const displayOptions = { day: 'numeric', month: 'long', year: 'numeric' };
+                document.getElementById('currentDate').innerText = todayObj.toLocaleDateString('ru-RU', displayOptions);
 
-  <div id="mainContent" style="display:none;">
-    <div class="status-grid" id="statusGrid"></div>
+                // --- 2. Давление онлайн (Open-Meteo) ---
+                const meteoUrl = 'https://api.open-meteo.com/v1/forecast?latitude=47.0105&longitude=28.8638&hourly=surface_pressure&past_days=7&forecast_days=7&timezone=Europe%2FChisinau';
+                const meteoRes = await fetch(meteoUrl);
+                if (!meteoRes.ok) throw new Error("Ошибка API погоды (Open-Meteo)");
+                const meteoData = await meteoRes.json();
 
-    <div class="panel">
-      <h2>7-Day Retrospective + 7-Day Forecast</h2>
-      <div class="chart-wrap">
-        <canvas id="mainChart"></canvas>
-      </div>
-      <div class="kp-scale" id="kpScale"></div>
-    </div>
+                const pressureByDate = {};
+                for(let i = 0; i < meteoData.hourly.time.length; i++) {
+                    // ПРЕДОХРАНИТЕЛЬ 1: Проверяем, существует ли запись
+                    if (!meteoData.hourly.time[i]) continue; 
+                    
+                    const date = meteoData.hourly.time[i].split('T')[0];
+                    const p = meteoData.hourly.surface_pressure[i];
+                    
+                    if(p == null) continue;
+                    if(!pressureByDate[date]) pressureByDate[date] = { sum: 0, count: 0 };
+                    pressureByDate[date].sum += p;
+                    pressureByDate[date].count += 1;
+                }
 
-    <div class="alerts-grid">
-      <div class="panel">
-        <h2>🚨 Active Alerts</h2>
-        <div id="alertsList"></div>
-      </div>
-      <div class="panel recommendations">
-        <h2>💡 Recommendations</h2>
-        <ul id="recsList"></ul>
-      </div>
-    </div>
+                const chartDates = Object.keys(pressureByDate).sort();
+                const pressureFinal = chartDates.map(d => Math.round((pressureByDate[d].sum / pressureByDate[d].count) * 0.750062));
 
-    <div class="panel">
-      <h2>📅 Daily Outlook</h2>
-      <div style="overflow-x:auto;">
-        <table id="dailyTable" style="width:100%; border-collapse: collapse; font-size:0.9rem;">
-          <thead>
-            <tr style="background:rgba(255,255,255,0.06); text-align:left;">
-              <th style="padding:10px;">Date</th>
-              <th style="padding:10px;">Day</th>
-              <th style="padding:10px;">Max Kp</th>
-              <th style="padding:10px;">Storm Level</th>
-              <th style="padding:10px;">Avg Pressure (mmHg)</th>
-              <th style="padding:10px;">Pressure Trend</th>
-              <th style="padding:10px;">Risk</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
+                // --- 3. Kp-индекс онлайн (NOAA - Прямой запрос) ---
+                let kpHistory = [];
+                const noaaUrl = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'; 
+                
+                const noaaRes = await fetch(noaaUrl);
+                if (!noaaRes.ok) throw new Error("Сервер NOAA недоступен");
+                const noaaRaw = await noaaRes.json();
+                
+                let currentDayKp = 0;
+                let lastSeenDate = "";
 
-  <footer>
-    Data sources: NOAA SWPC (Kp index & forecast) · Open-Meteo (pressure for Chișinău in mmHg)<br>
-    Last updated: <span id="genTime"></span> · This information is for awareness only and does not replace medical advice.
-  </footer>
-</div>
+                // Парсим ответ NOAA
+                for (let i = 1; i < noaaRaw.length; i++) {
+                    // ПРЕДОХРАНИТЕЛЬ 2: Игнорируем пустые или битые строки в конце файла
+                    if (!noaaRaw[i] || !noaaRaw[i][0] || noaaRaw[i].length < 2) continue; 
 
-<script>
-// ============================================================
-// CONFIG
-// ============================================================
-const CHISINAU = { lat: 47.01, lon: 28.86 };
-const CHISINAU_AVG_HPA = 1015;
-const CHISINAU_AVG_MMHG = Math.round(CHISINAU_AVG_HPA * 0.75006);
-const HPA_TO_MMHG = 0.75006;
+                    const dateStr = String(noaaRaw[i][0]);
+                    const date = dateStr.split(' ')[0];
+                    const kp = parseFloat(noaaRaw[i][1]);
+                    
+                    if (isNaN(kp)) continue; // Игнорируем, если Kp не число
 
-// CORS blocks API calls from file:// (local), so detect and skip
-const IS_LOCAL = window.location.protocol === 'file:';
+                    if (date !== lastSeenDate) {
+                        if (lastSeenDate !== "") kpHistory.push(currentDayKp);
+                        lastSeenDate = date;
+                        currentDayKp = kp;
+                    } else {
+                        if (kp > currentDayKp) currentDayKp = kp; 
+                    }
+                }
+                kpHistory.push(currentDayKp);
 
-const API_KP = 'https://services.swpc.noaa.gov/products/planetary-k-index.json';
-const API_KP_FORECAST = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json';
-const API_PRESSURE = `https://api.open-meteo.com/v1/forecast?latitude=${CHISINAU.lat}&longitude=${CHISINAU.lon}&hourly=pressure_msl&forecast_days=16&timezone=auto`;
+                // --- 4. Привязка дат (15 дней) ---
+                const todayIdx = 7; 
+                const kpFinal = new Array(chartDates.length).fill(null);
+                
+                let histIdx = kpHistory.length - 1;
+                for (let i = todayIdx; i >= 0 && histIdx >= 0; i--) {
+                    kpFinal[i] = Math.round(kpHistory[histIdx]);
+                    histIdx--;
+                }
 
-// Auto-refresh interval (15 minutes)
-const AUTO_REFRESH_INTERVAL = 15 * 60 * 1000;
-let AUTO_REFRESH_TIMER = null;
+                // --- 5. Обновление интерфейса ---
+                const currentPressure = pressureFinal[todayIdx];
+                let currentKp = kpFinal[todayIdx];
+                
+                // Если за сегодня данных еще нет, берем вчерашние
+                if (currentKp === null || isNaN(currentKp)) currentKp = kpFinal[todayIdx - 1];
+                if (currentKp === null || isNaN(currentKp)) currentKp = 0;
 
-// ============================================================
-// STATE
-// ============================================================
-let KP_DATA = [];
-let PRESSURE_RAW = { times: [], values: [] };
-let TODAY_ISO = '';
-let CURRENT_HOUR = '';
-let LAST_UPDATE_TIME = null;
-let DATA_FROM_API = false;
-let CHART_INSTANCE = null;
+                document.getElementById('kpValue').innerText = `${currentKp} Kp`;
+                document.getElementById('pressureValue').innerText = `${currentPressure} мм`;
+                
+                const pressDiff = currentPressure - 760;
+                document.getElementById('pressureDesc').innerText = pressDiff > 0 ? `(+${pressDiff} мм от нормы)` : `(${pressDiff} мм от нормы)`;
 
-// ============================================================
-// HELPERS
-// ============================================================
-function hPaToMmHg(hPa) {
-  return Math.round(hPa * HPA_TO_MMHG);
-}
+                const kpCard = document.getElementById('kpCard');
+                const alertCard = document.getElementById('alertCard');
+                const alertLine = document.getElementById('alertLine');
+                const alertTitle = document.getElementById('alertTitle');
+                const alertText = document.getElementById('alertText');
 
-function kpToStormLevel(kp) {
-  if (kp >= 9) return { code:'G5', label:'Extreme', color:'#6a1b9a' };
-  if (kp >= 8) return { code:'G4', label:'Severe', color:'#c62828' };
-  if (kp >= 7) return { code:'G3', label:'Strong', color:'#ef5350' };
-  if (kp >= 6) return { code:'G2', label:'Moderate', color:'#ff7043' };
-  if (kp >= 5) return { code:'G1', label:'Minor', color:'#ffa726' };
-  if (kp >= 4) return { code:'—',  label:'Active', color:'#ffca28' };
-  if (kp >= 3) return { code:'—',  label:'Unsettled', color:'#9ccc65' };
-  return          { code:'—',  label:'Quiet', color:'#66bb6a' };
-}
+                if (currentKp >= 5) {
+                    kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-red-500 shadow-lg transition-colors duration-500";
+                    document.getElementById('kpDesc').innerText = `(Опасность: Уровень G${currentKp - 4})`;
+                    
+                    if (currentPressure < 758) {
+                        alertCard.className = "bg-red-900/40 border border-red-500/50 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
+                        alertLine.className = "absolute top-0 left-0 w-full h-1 bg-red-500";
+                        alertTitle.innerHTML = "⚠️ КРИТИЧЕСКИЙ ПЕРИОД";
+                        alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
+                        alertText.innerHTML = `Сочетание <strong class="text-red-300">магнитной бури</strong> и низкого давления. <br><br><strong>Рекомендации:</strong> Отложите тяжелые нагрузки, пейте воду. Возможны погрешности при работе с GNSS/RTK.`;
+                        alertText.className = "text-sm text-red-200/90 leading-relaxed";
+                    } else {
+                        alertCard.className = "bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
+                        alertLine.className = "absolute top-0 left-0 w-full h-1 bg-yellow-500";
+                        alertTitle.innerHTML = "🟡 ВНИМАНИЕ: МАГНИТНАЯ БУРЯ";
+                        alertTitle.className = "text-yellow-400 font-bold text-lg mb-2 flex items-center gap-2";
+                        alertText.innerHTML = "Давление в норме, но наблюдается возмущение геомагнитного фона. Возможна утомляемость.";
+                        alertText.className = "text-sm text-yellow-200/80 leading-relaxed";
+                    }
+                } else {
+                    kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-green-500 shadow-lg transition-colors duration-500";
+                    document.getElementById('kpDesc').innerText = "(Фон в норме)";
+                    
+                    alertCard.className = "bg-green-900/20 border border-green-500/30 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
+                    alertLine.className = "absolute top-0 left-0 w-full h-1 bg-green-500";
+                    alertTitle.innerHTML = "✅ СТАБИЛЬНО";
+                    alertTitle.className = "text-green-400 font-bold text-lg mb-2 flex items-center gap-2";
+                    alertText.innerHTML = "Геомагнитный фон спокоен. Атмосферное давление не представляет риска для здоровья.";
+                    alertText.className = "text-sm text-green-200/80 leading-relaxed";
+                }
 
-function fmtDate(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-GB', { day:'2-digit', month:'short' });
-}
-function fmtDateLong(iso) {
-  const d = new Date(iso);
-  return d.toLocaleDateString('en-GB', { weekday:'long', day:'2-digit', month:'long', year:'numeric' });
-}
-function fmtDay(iso) {
-  return new Date(iso).toLocaleDateString('en-GB', { weekday:'short' });
-}
+                document.getElementById('statusCards').style.opacity = "1";
 
-async function fetchAll() {
-  console.log('Fetching real data from APIs...');
-  const isOnline = navigator.onLine;
-  
-  if (!isOnline) {
-    console.warn('No internet connection - using demo data');
-    loadDemoData();
-    return;
-  }
+                // --- 6. Отрисовка графика ---
+                const chartDatesFormatted = chartDates.map(d => {
+                    const dateObj = new Date(d);
+                    return dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
+                });
+                
+                const todayMarker = chartDatesFormatted[todayIdx];
 
-  let kpSuccess = false, pressureSuccess = false;
+                const kpColors = kpFinal.map(val => {
+                    if (val === null) return 'rgba(0,0,0,0)';
+                    if (val >= 5) return '#ff4b4b'; 
+                    if (val >= 4) return '#ffa500'; 
+                    return '#00cc96'; 
+                });
 
-  // Helper to fetch with timeout and prevent caching
-  const fetchWithTimeout = (url, timeout = 5000) => {
-    // Append a timestamp to strictly bypass browser cache
-    const separator = url.includes('?') ? '&' : '?';
-    const cacheBusterUrl = `${url}${separator}_t=${Date.now()}`;
-    
-    return Promise.race([
-      fetch(cacheBusterUrl, { cache: 'no-store' }),
-      new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout')), timeout))
-    ]);
-  };
+                const tracePressure = {
+                    x: chartDatesFormatted, y: pressureFinal,
+                    name: 'Давление (мм)', type: 'scatter', mode: 'lines+markers',
+                    line: { color: '#00d2ff', width: 3, shape: 'spline' },
+                    marker: { size: 6 }, yaxis: 'y1'
+                };
 
-  // Parse Kp index (observed)
-  try {
-    const kpRes = await fetchWithTimeout(API_KP);
-    if (kpRes.ok) {
-      const kpJson = await kpRes.json();
-      if (Array.isArray(kpJson) && kpJson[0]?.time) {
-        KP_DATA = kpJson.slice(-56).map(entry => ({
-          t: entry.time?.slice?.(0, 16) || '2026-01-01T00:00',
-          kp: parseFloat(entry.kp_index) || 0,
-          forecast: false
-        }));
-        kpSuccess = true;
-        console.log('✓ Kp index data loaded:', KP_DATA.length, 'entries');
-      }
-    } else {
-      console.warn('KP API returned status:', kpRes.status);
-    }
-  } catch(e) { console.warn('KP API error:', e.message); }
+                const traceKp = {
+                    x: chartDatesFormatted, y: kpFinal,
+                    name: 'Магнитная активность', type: 'bar',
+                    marker: { color: kpColors }, opacity: 0.85, yaxis: 'y2'
+                };
 
-  // Parse Kp forecast
-  try {
-    const kpFcRes = await fetchWithTimeout(API_KP_FORECAST);
-    if (kpFcRes.ok) {
-      const kpFcJson = await kpFcRes.json();
-      if (Array.isArray(kpFcJson) && kpFcJson[0]?.issuedTime) {
-        const fcEntries = kpFcJson.slice(0, 56).map(entry => ({
-          t: entry.issuedTime?.slice?.(0, 16) || '2026-01-01T00:00',
-          kp: parseFloat(entry.kp) || 0,
-          forecast: true
-        }));
-        const existingTimes = new Set(KP_DATA.map(d => d.t));
-        fcEntries.forEach(e => {
-          if (!existingTimes.has(e.t)) KP_DATA.push(e);
-        });
-        console.log('✓ Kp forecast data loaded:', fcEntries.length, 'entries');
-      }
-    } else {
-      console.warn('KP Forecast API returned status:', kpFcRes.status);
-    }
-  } catch(e) { console.warn('KP Forecast API error:', e.message); }
+                const layout = {
+                    paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
+                    font: { color: '#e5e7eb', family: 'Inter, sans-serif' },
+                    margin: { t: 40, b: 40, l: 50, r: 50 }, hovermode: 'x unified',
+                    legend: { orientation: 'h', yanchor: 'bottom', y: 1.1, xanchor: 'right', x: 1 },
+                    yaxis: { title: 'Давление (мм)', range: [Math.min(...pressureFinal) - 5, Math.max(...pressureFinal) + 5], gridcolor: '#374151', zeroline: false },
+                    yaxis2: { title: 'Kp-индекс', overlaying: 'y', side: 'right', range: [0, 9], showgrid: false, zeroline: false },
+                    shapes: [
+                        { type: 'line', x0: todayMarker, x1: todayMarker, y0: 0, y1: 1, yref: 'paper', line: { color: '#ffffff', width: 2, dash: 'dot', opacity: 0.7 } },
+                        { type: 'rect', x0: todayIdx - 0.5, x1: todayIdx + 0.5, y0: 0, y1: 1, yref: 'paper', fillcolor: 'rgba(255, 255, 255, 0.1)', line: { width: 0 }, layer: 'below' }
+                    ],
+                    annotations: [
+                        { x: todayMarker, y: 1.05, yref: 'paper', text: 'СЕГОДНЯ', showarrow: false, font: { color: '#ffffff', size: 12, weight: 'bold' }, bgcolor: 'rgba(255, 255, 255, 0.2)', borderpad: 4, bordercolor: '#ffffff', borderwidth: 1 }
+                    ]
+                };
 
-  // Parse pressure from Open-Meteo
-  try {
-    const pressureRes = await fetchWithTimeout(API_PRESSURE);
-    if (pressureRes.ok) {
-      const pressureJson = await pressureRes.json();
-      if (pressureJson && pressureJson.hourly) {
-        PRESSURE_RAW.times = pressureJson.hourly.time || [];
-        PRESSURE_RAW.values = pressureJson.hourly.pressure_msl || [];
-        pressureSuccess = true;
-        console.log('✓ Pressure data loaded:', PRESSURE_RAW.times.length, 'entries');
-      }
-    } else {
-      console.warn('Pressure API returned status:', pressureRes.status);
-    }
-  } catch(e) { console.warn('Pressure API error:', e.message); }
+                document.getElementById('loadingOverlay').style.display = 'none';
+                Plotly.newPlot('meteoChart', [traceKp, tracePressure], layout, { responsive: true, displayModeBar: false });
 
-  // Check if we got real data
-  if (kpSuccess && pressureSuccess && KP_DATA.length > 20 && PRESSURE_RAW.times.length > 100) {
-    DATA_FROM_API = true;
-    console.log('✓ Real data successfully loaded from APIs');
-  } else {
-    console.warn('Incomplete data from APIs - using demo data as fallback');
-    loadDemoData();
-    DATA_FROM_API = false;
-  }
-
-  // Set time variables
-  const now = new Date();
-  const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
-  TODAY_ISO = localNow.toISOString().slice(0, 10);
-  CURRENT_HOUR = localNow.toISOString().slice(0, 16);
-  LAST_UPDATE_TIME = new Date();
-
-  console.log('Data fetch complete. KP entries:', KP_DATA.length, 'Pressure entries:', PRESSURE_RAW.times.length);
-}
-
-function loadDemoData() {
-  console.log('Loading demo data...');
-  const now = new Date();
-  
-  // Kp data: 7 days past + 7 days forecast (3-hour intervals)
-  KP_DATA = [];
-  for (let day = -7; day <= 7; day++) {
-    for (let h = 0; h < 24; h += 3) {
-      const d = new Date(now.getTime() + day * 86400000 + h * 3600000);
-      let kp = 1 + Math.random() * 2;
-      
-      // Simulate some activity
-      if (day === -3) kp = 3 + Math.random() * 3; // past storm
-      if (day === 0 && h >= 6 && h <= 12) kp = 2 + Math.random(); // light activity today
-      if (day > 3) kp = 1 + Math.random(); // quiet forecast
-      
-      KP_DATA.push({
-        t: d.toISOString().slice(0, 16),
-        kp: kp,
-        forecast: day >= 0
-      });
-    }
-  }
-  
-  // Pressure data: 16 days hourly
-  PRESSURE_RAW = { times: [], values: [] };
-  for (let i = -7 * 24; i < 16 * 24; i++) {
-    const d = new Date(now.getTime() + i * 3600000);
-    const dayProgress = i / 24;
-    const pressure = 1015 + Math.sin(dayProgress / 3) * 8 + Math.sin(dayProgress / 7) * 4 + (Math.random() - 0.5) * 2;
-    PRESSURE_RAW.times.push(d.toISOString().slice(0, 16));
-    PRESSURE_RAW.values.push(pressure);
-  }
-  
-  console.log('Demo data loaded:', KP_DATA.length, 'KP entries,', PRESSURE_RAW.times.length, 'pressure entries');
-}
-
-// ============================================================
-// RENDER STATUS CARDS
-// ============================================================
-function renderStatusCards() {
-  if (!KP_DATA.length || !PRESSURE_RAW.times.length) return;
-
-  const observed = KP_DATA.filter(d => !d.forecast);
-  const currentKp = observed[observed.length - 1]?.kp || 0;
-  const storm = kpToStormLevel(currentKp);
-
-  // Find closest pressure to now
-  const nowIso = new Date().toISOString().slice(0, 13);
-  let nowIdx = PRESSURE_RAW.times.findIndex(t => t >= nowIso);
-  if (nowIdx < 0) nowIdx = PRESSURE_RAW.times.length - 1;
-  const currentP = PRESSURE_RAW.values[nowIdx] || 1015;
-
-  // 24h pressure change
-  const p24Idx = Math.max(0, nowIdx - 24);
-  const pChange = (currentP - (PRESSURE_RAW.values[p24Idx] || currentP)).toFixed(1);
-  const pChangeNum = parseFloat(pChange);
-  const pTrend = pChangeNum < -5 ? '📉 Falling fast' : pChangeNum < -2 ? '↘ Falling' : pChangeNum > 5 ? '📈 Rising fast' : pChangeNum > 2 ? '↗ Rising' : '→ Stable';
-
-  // upcoming max Kp in next 72h
-  const future72 = KP_DATA.filter(d => d.forecast).slice(0, 24);
-  const maxFutureKp = future72.length ? Math.max(...future72.map(d => d.kp)) : currentKp;
-
-  // pressure min next 72h
-  const future72P = PRESSURE_RAW.values.slice(nowIdx, nowIdx + 72);
-  const minP = future72P.length ? Math.min(...future72P) : currentP;
-
-  const cards = [
-    {
-      label:'Current Geomagnetic',
-      value: currentKp.toFixed(1),
-      unit:'Kp index',
-      detail: `${storm.code !== '—' ? storm.code + ' · ' : ''}${storm.label}`,
-      alert: currentKp >= 5 ? 'alert-high' : currentKp >= 4 ? 'alert-mid' : 'alert-low',
-    },
-    {
-      label:'Pressure Now',
-      value: hPaToMmHg(currentP),
-      unit:'mmHg (MSL)',
-      detail: `${pTrend} · ${pChangeNum > 0 ? '+' : ''}${(pChangeNum * HPA_TO_MMHG).toFixed(1)} mmHg / 24h`,
-      alert: Math.abs(pChangeNum) > 8 ? 'alert-high' : Math.abs(pChangeNum) > 4 ? 'alert-mid' : 'alert-low',
-    },
-    {
-      label:'Peak Kp (next 72h)',
-      value: maxFutureKp.toFixed(1),
-      unit:'forecast',
-      detail: kpToStormLevel(maxFutureKp).label + (kpToStormLevel(maxFutureKp).code !== '—' ? ' · ' + kpToStormLevel(maxFutureKp).code : ''),
-      alert: maxFutureKp >= 5 ? 'alert-high' : maxFutureKp >= 4 ? 'alert-mid' : 'alert-low',
-    },
-    {
-      label:'Min Pressure (next 72h)',
-      value: hPaToMmHg(minP),
-      unit:'mmHg',
-      detail: minP < 1005 ? 'Deep low — high risk' : minP < 1010 ? 'Low — watch out' : 'Normal range',
-      alert: minP < 1005 ? 'alert-high' : minP < 1010 ? 'alert-mid' : 'alert-low',
-    },
-  ];
-
-  document.getElementById('statusGrid').innerHTML = cards.map(c => `
-    <div class="status-card ${c.alert}">
-      <div class="label">${c.label}</div>
-      <div class="value">${c.value}</div>
-      <div class="unit">${c.unit}</div>
-      <div class="detail">${c.detail}</div>
-    </div>
-  `).join('');
-}
-
-// ============================================================
-// MAIN CHART
-// ============================================================
-function renderMainChart() {
-  if (!KP_DATA.length || !PRESSURE_RAW.times.length) return;
-
-  const kpPoints = KP_DATA.map(d => ({ x: d.t, y: d.kp }));
-  const pressurePoints = PRESSURE_RAW.times.map((t, i) => ({ x: t, y: hPaToMmHg(PRESSURE_RAW.values[i]) }));
-
-  const pMinMmHg = hPaToMmHg(1000);
-  const pMaxMmHg = hPaToMmHg(1030);
-
-  const kpColors = KP_DATA.map(d => {
-    const c = kpToStormLevel(d.kp).color;
-    return d.forecast ? c + '80' : c;
-  });
-
-  // Destroy previous chart instance if it exists
-  if (CHART_INSTANCE) {
-    CHART_INSTANCE.destroy();
-    CHART_INSTANCE = null;
-  }
-  
-  // Remove and recreate canvas to fully reset Chart.js state
-  const chartWrap = document.querySelector('.chart-wrap');
-  const oldCanvas = document.getElementById('mainChart');
-  if (oldCanvas) {
-    oldCanvas.remove();
-  }
-  
-  const newCanvas = document.createElement('canvas');
-  newCanvas.id = 'mainChart';
-  chartWrap.appendChild(newCanvas);
-  
-  const ctx = newCanvas.getContext('2d');
-  
-  CHART_INSTANCE = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      datasets: [
-        {
-          type: 'bar',
-          label: 'Kp index (geomagnetic)',
-          data: kpPoints,
-          backgroundColor: kpColors,
-          borderColor: kpColors,
-          yAxisID: 'yKp',
-          borderWidth: 0,
-          barPercentage: 1.0,
-          categoryPercentage: 1.0,
-        },
-        {
-          type: 'line',
-          label: 'Atmospheric pressure (mmHg)',
-          data: pressurePoints.slice(0, KP_DATA.length * 3),
-          borderColor: '#64b5f6',
-          backgroundColor: 'rgba(100,181,246,0.15)',
-          yAxisID: 'yP',
-          tension: 0.35,
-          borderWidth: 2.5,
-          pointRadius: 0,
-          pointHoverRadius: 5,
-          fill: true,
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      interaction: { mode: 'index', intersect: false },
-      scales: {
-        x: {
-          type: 'time',
-          time: { unit: 'day', displayFormats: { day: 'dd MMM' } },
-          ticks: { color: '#9aa5b8', maxRotation: 0 },
-          grid: { color: 'rgba(255,255,255,0.05)' }
-        },
-        yKp: {
-          type: 'linear',
-          position: 'left',
-          min: 0, max: 9,
-          title: { display: true, text: 'Kp index', color: '#e4e8f1' },
-          ticks: { color: '#9aa5b8', stepSize: 1 },
-          grid: { color: 'rgba(255,255,255,0.05)' }
-        },
-        yP: {
-          type: 'linear',
-          position: 'right',
-          min: pMinMmHg,
-          max: pMaxMmHg,
-          title: { display: true, text: 'Pressure (mmHg)', color: '#64b5f6' },
-          ticks: { color: '#64b5f6' },
-          grid: { drawOnChartArea: false }
-        }
-      },
-      plugins: {
-        legend: {
-          labels: { color: '#e4e8f1', usePointStyle: true, padding: 14 }
-        },
-        tooltip: {
-          backgroundColor: 'rgba(15,23,41,0.95)',
-          borderColor: 'rgba(255,255,255,0.1)',
-          borderWidth: 1,
-          callbacks: {
-            title: (items) => {
-              const d = new Date(items[0].parsed.x);
-              return d.toLocaleString('en-GB', { weekday:'short', day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit' });
-            },
-            label: (ctx) => {
-              if (ctx.dataset.label.startsWith('Kp')) {
-                const storm = kpToStormLevel(ctx.parsed.y);
-                return `Kp: ${ctx.parsed.y.toFixed(2)} — ${storm.label}${storm.code !== '—' ? ' ('+storm.code+')' : ''}`;
-              }
-              return `Pressure: ${ctx.parsed.y.toFixed(0)} mmHg`;
+            } catch (error) {
+                console.error("Критическая ошибка:", error);
+                document.getElementById('loadingOverlay').innerHTML = `<span class='text-red-500'>${error.message}. Проверьте консоль разработчика (F12).</span>`;
             }
-          }
-        },
-        annotation: {
-          annotations: {
-            todayLine: {
-              type: 'line',
-              xMin: CURRENT_HOUR,
-              xMax: CURRENT_HOUR,
-              borderColor: '#ff0000',
-              borderWidth: 2.5,
-              label: {
-                display: true,
-                content: '▼ NOW',
-                position: 'start',
-                backgroundColor: '#ff0000',
-                color: '#fff',
-                font: { weight: 'bold', size: 11 },
-                padding: 6,
-                borderRadius: 4,
-                yAdjust: -8,
-              }
-            },
-            stormZone: {
-              type: 'box',
-              yMin: 5, yMax: 9,
-              yScaleID: 'yKp',
-              backgroundColor: 'rgba(239,83,80,0.07)',
-              borderColor: 'rgba(239,83,80,0.3)',
-              borderWidth: 1,
-              borderDash: [4,4],
-              label: {
-                display: true,
-                content: 'Storm zone (G1+)',
-                position: { x: 'start', y: 'start' },
-                color: 'rgba(239,83,80,0.7)',
-                font: { size: 10 },
-                backgroundColor: 'transparent'
-              }
-            },
-            activeZone: {
-              type: 'box',
-              yMin: 4, yMax: 5,
-              yScaleID: 'yKp',
-              backgroundColor: 'rgba(255,167,38,0.05)',
-              borderWidth: 0,
-            },
-            avgPressureLine: {
-              type: 'line',
-              yMin: CHISINAU_AVG_MMHG,
-              yMax: CHISINAU_AVG_MMHG,
-              yScaleID: 'yP',
-              borderColor: '#42a5f5',
-              borderWidth: 2,
-              borderDash: [8, 4],
-              label: {
-                display: true,
-                content: '─ Avg Chișinău: ' + CHISINAU_AVG_MMHG + ' mmHg',
-                position: 'end',
-                backgroundColor: 'rgba(66,165,245,0.15)',
-                color: '#42a5f5',
-                font: { weight: 'bold', size: 11 },
-                padding: { x: 8, y: 4 },
-                borderRadius: 4,
-              }
-            }
-          }
         }
-      }
-    }
-  });
 
-  const levels = [
-    { r:'0-2', l:'Quiet', c:'#66bb6a' },
-    { r:'3', l:'Unsettled', c:'#9ccc65' },
-    { r:'4', l:'Active', c:'#ffca28' },
-    { r:'5 (G1)', l:'Minor storm', c:'#ffa726' },
-    { r:'6 (G2)', l:'Moderate', c:'#ff7043' },
-    { r:'7 (G3)', l:'Strong', c:'#ef5350' },
-    { r:'8 (G4)', l:'Severe', c:'#c62828' },
-    { r:'9 (G5)', l:'Extreme', c:'#6a1b9a' },
-  ];
-  document.getElementById('kpScale').innerHTML = levels.map(l =>
-    `<div class="kp-scale-item" style="background:${l.c}"><b>${l.r}</b><br>${l.l}</div>`
-  ).join('');
-}
-
-// ============================================================
-// ALERTS
-// ============================================================
-function renderAlerts() {
-  if (!KP_DATA.length || !PRESSURE_RAW.times.length) return;
-
-  const alerts = [];
-  const nowIso = new Date().toISOString().slice(0, 13);
-  let nowIdx = PRESSURE_RAW.times.findIndex(t => t >= nowIso);
-  if (nowIdx < 0) nowIdx = PRESSURE_RAW.times.length - 1;
-  const currentP = PRESSURE_RAW.values[nowIdx];
-
-  const observed = KP_DATA.filter(d => !d.forecast);
-  const recentMaxKp = observed.length ? Math.max(...observed.slice(-8).map(d => d.kp)) : 0;
-
-  if (recentMaxKp >= 5) {
-    alerts.push({
-      type: recentMaxKp >= 6 ? 'critical' : 'warning',
-      title: `🧲 Geomagnetic ${kpToStormLevel(recentMaxKp).code} Storm Active`,
-      time: 'Last 24 hours',
-      body: `A ${kpToStormLevel(recentMaxKp).label.toLowerCase()} geomagnetic storm has been measured recently. Weather-sensitive people may experience headaches, fatigue, sleep problems, blood pressure fluctuations and irritability.`
-    });
-  }
-
-  const future = KP_DATA.filter(d => d.forecast);
-  if (future.length) {
-    const tomorrow = future.filter(d => d.t.startsWith(new Date(Date.now() + 86400000).toISOString().slice(0, 10)));
-    if (tomorrow.length) {
-      const tomorrowMax = Math.max(...tomorrow.map(d => d.kp));
-      if (tomorrowMax >= 5) {
-        alerts.push({
-          type: tomorrowMax >= 6 ? 'critical' : 'warning',
-          title: `⚠ ${kpToStormLevel(tomorrowMax).code} Storm Expected Tomorrow`,
-          time: 'Forecast',
-          body: `NOAA forecasts Kp reaching ${tomorrowMax.toFixed(1)}. Plan lighter activities and prioritize rest.`
-        });
-      }
-    }
-  }
-
-  // Pressure drop check
-  const p24Idx = Math.max(0, nowIdx - 24);
-  const pChange = currentP - PRESSURE_RAW.values[p24Idx];
-  const futureMin = Math.min(...PRESSURE_RAW.values.slice(nowIdx, nowIdx + 72));
-  const drop = currentP - futureMin;
-
-  if (drop > 8) {
-    alerts.push({
-      type: 'critical',
-      title: '📉 Sharp Pressure Drop Incoming',
-      time: 'Next 48h',
-      body: `Pressure will drop ${(drop * HPA_TO_MMHG).toFixed(1)} mmHg. Rapid drops frequently trigger migraines, joint pain, sinus discomfort.`
-    });
-  } else if (drop > 4) {
-    alerts.push({
-      type: 'warning',
-      title: '↘ Moderate Pressure Fall Expected',
-      time: 'Next 48h',
-      body: `A moderate low-pressure system is approaching. Keep hydrated and monitor how you feel.`
-    });
-  }
-
-  if (recentMaxKp >= 5 && drop > 6) {
-    alerts.push({
-      type: 'critical',
-      title: '🔴 COMBINED METEO-STRESS WINDOW',
-      time: 'Now',
-      body: 'Geomagnetic storm AND pressure low are overlapping. This is the highest-risk configuration for meteo-sensitive people.'
-    });
-  }
-
-  if (!alerts.length) {
-    alerts.push({
-      type: 'ok',
-      title: '✓ Conditions Normal',
-      time: 'Current',
-      body: 'Geomagnetic activity and atmospheric pressure are within normal ranges. No special precautions needed.'
-    });
-  }
-
-  document.getElementById('alertsList').innerHTML = alerts.map(a => `
-    <div class="alert-item ${a.type}">
-      <div class="alert-title">${a.title}</div>
-      <div class="alert-time">${a.time}</div>
-      <div class="alert-body">${a.body}</div>
-    </div>
-  `).join('');
-}
-
-// ============================================================
-// RECOMMENDATIONS
-// ============================================================
-function renderRecommendations() {
-  const recs = [];
-
-  const observed = KP_DATA.filter(d => !d.forecast);
-  const recentMaxKp = observed.length ? Math.max(...observed.map(d => d.kp)) : 0;
-  const future = KP_DATA.filter(d => d.forecast);
-  const futureMaxKp = future.length ? Math.max(...future.slice(0, 24).map(d => d.kp)) : 0;
-
-  const nowIso = new Date().toISOString().slice(0, 13);
-  let nowIdx = PRESSURE_RAW.times.findIndex(t => t >= nowIso);
-  if (nowIdx < 0) nowIdx = PRESSURE_RAW.times.length - 1;
-  const currentP = PRESSURE_RAW.values[nowIdx];
-  const futureMin = Math.min(...PRESSURE_RAW.values.slice(nowIdx, nowIdx + 48));
-  const drop = currentP - futureMin;
-
-  if (recentMaxKp >= 5 || futureMaxKp >= 5) {
-    recs.push({ text: '<b>Avoid strenuous exercise</b> during storm peaks (midnight–morning hours).', cls: 'danger' });
-    recs.push({ text: '<b>Monitor blood pressure</b> if you have hypertension/hypotension.', cls: 'warn' });
-    recs.push({ text: '<b>Migraine prone?</b> Take preventive medication now.', cls: 'warn' });
-  }
-
-  if (drop > 4) {
-    recs.push({ text: '<b>Hydrate well</b> (2–2.5 L water) and reduce salt, caffeine.', cls: 'warn' });
-  }
-
-  recs.push({ text: '<b>Gentle activity OK:</b> short walks, yoga, breathing exercises.', cls: '' });
-  recs.push({ text: '<b>Eat light:</b> vegetables, fish, nuts, berries.', cls: '' });
-
-  if (recentMaxKp < 4 && drop < 4) {
-    recs.push({ text: '<b>Conditions favorable:</b> great for outdoor activity and exercise.', cls: '' });
-  }
-
-  document.getElementById('recsList').innerHTML = recs.map(r =>
-    `<li class="${r.cls}">${r.text}</li>`
-  ).join('');
-}
-
-// ============================================================
-// DAILY TABLE
-// ============================================================
-function renderDailyTable() {
-  if (!KP_DATA.length || !PRESSURE_RAW.times.length) return;
-
-  const days = {};
-  KP_DATA.forEach(d => {
-    const day = d.t.slice(0, 10);
-    if (!days[day]) days[day] = { kpMax: 0, forecast: false };
-    days[day].kpMax = Math.max(days[day].kpMax, d.kp);
-    if (d.forecast) days[day].forecast = true;
-  });
-
-  PRESSURE_RAW.times.forEach((t, i) => {
-    const day = t.slice(0, 10);
-    if (days[day]) {
-      if (!days[day].ps) days[day].ps = [];
-      days[day].ps.push(PRESSURE_RAW.values[i]);
-    }
-  });
-
-  const rows = Object.keys(days).sort().slice(-14).map(day => {
-    const d = days[day];
-    const maxKp = d.kpMax;
-    const avgP = d.ps ? hPaToMmHg(d.ps.reduce((a, b) => a + b, 0) / d.ps.length) : 0;
-    const pMin = d.ps ? hPaToMmHg(Math.min(...d.ps)) : 0;
-    const pMax = d.ps ? hPaToMmHg(Math.max(...d.ps)) : 0;
-    const pRange = pMax - pMin;
-    const trend = pRange > 8 ? '📉📈 Volatile' : pRange > 5 ? '↕ Variable' : '→ Stable';
-    const storm = kpToStormLevel(maxKp);
-
-    let risk = 'Low', riskColor = '#66bb6a';
-    if (maxKp >= 5 || pRange > 10) { risk = 'High'; riskColor = '#ef5350'; }
-    else if (maxKp >= 4 || pRange > 6) { risk = 'Moderate'; riskColor = '#ffa726'; }
-
-    const isToday = day === TODAY_ISO;
-    const rowStyle = isToday ? 'background: rgba(100,181,246,0.12); font-weight:600;' : '';
-
-    return `<tr style="${rowStyle} border-bottom:1px solid rgba(255,255,255,0.05);">
-      <td style="padding:10px;">${fmtDate(day)}${isToday ? ' <span style="color:#64b5f6;">← TODAY</span>' : ''}</td>
-      <td style="padding:10px;">${fmtDay(day)}</td>
-      <td style="padding:10px;"><span style="color:${storm.color}; font-weight:700;">${maxKp.toFixed(1)}</span></td>
-      <td style="padding:10px;"><span style="background:${storm.color}; padding:3px 8px; border-radius:4px; color:#fff; font-size:0.8rem;">${storm.code !== '—' ? storm.code + ' ' : ''}${storm.label}</span></td>
-      <td style="padding:10px;">${avgP.toFixed(0)}</td>
-      <td style="padding:10px;">${trend}</td>
-      <td style="padding:10px;"><span style="color:${riskColor}; font-weight:700;">${risk}</span></td>
-    </tr>`;
-  }).join('');
-
-  document.querySelector('#dailyTable tbody').innerHTML = rows;
-}
-
-// ============================================================
-// INIT
-// ============================================================
-function updateDataStatus() {
-  const status = document.getElementById('dataStatus');
-  if (!LAST_UPDATE_TIME) {
-    status.textContent = 'Fetching data...';
-    return;
-  }
-  
-  const dataSource = DATA_FROM_API ? '✓ Real data from NOAA/Open-Meteo' : '⚠ Demo data (API unavailable)';
-  const timeStr = LAST_UPDATE_TIME.toLocaleTimeString('en-GB');
-  status.textContent = `${dataSource} · Updated: ${timeStr}`;
-  
-  if (DATA_FROM_API) {
-    status.style.color = '#66bb6a';
-  } else {
-    status.style.color = '#ffa726';
-  }
-}
-
-async function init() {
-  try {
-    await fetchAll();
-
-    document.getElementById('todayDate').textContent = '📅 ' + fmtDateLong(TODAY_ISO);
-    document.getElementById('genTime').textContent = new Date().toLocaleString('en-GB');
-
-    updateDataStatus();
-    renderStatusCards();
-    renderMainChart();
-    renderAlerts();
-    renderRecommendations();
-    renderDailyTable();
-
-    document.getElementById('loading').style.display = 'none';
-    document.getElementById('mainContent').style.display = 'block';
-
-    // Set up refresh button
-    document.getElementById('refreshBtn').addEventListener('click', async () => {
-      const btn = document.getElementById('refreshBtn');
-      if (btn.disabled) return; // Prevent multiple simultaneous refreshes
-      
-      btn.disabled = true;
-      btn.textContent = '⏳ Refreshing...';
-      
-      try {
-        await fetchAll();
-        updateDataStatus();
-        renderStatusCards();
-        renderMainChart();
-        renderAlerts();
-        renderRecommendations();
-        renderDailyTable();
-        document.getElementById('genTime').textContent = new Date().toLocaleString('en-GB');
-      } catch (e) {
-        console.error('Refresh error:', e);
-        const status = document.getElementById('dataStatus');
-        status.textContent = '⚠ Refresh failed - ' + e.message;
-        status.style.color = '#ef5350';
-      } finally {
-        btn.disabled = false;
-        btn.textContent = '🔄 Refresh';
-      }
-    });
-
-    // Auto-refresh every 15 minutes
-    if (AUTO_REFRESH_TIMER) clearInterval(AUTO_REFRESH_TIMER);
-    AUTO_REFRESH_TIMER = setInterval(async () => {
-      console.log('Auto-refreshing data...');
-      try {
-        await fetchAll();
-        updateDataStatus();
-        renderStatusCards();
-        renderMainChart();
-        renderAlerts();
-        renderRecommendations();
-        renderDailyTable();
-        document.getElementById('genTime').textContent = new Date().toLocaleString('en-GB');
-        console.log('Auto-refresh successful');
-      } catch (e) {
-        console.error('Auto-refresh error:', e);
-      }
-    }, AUTO_REFRESH_INTERVAL);
-
-  } catch (e) {
-    console.error('Init error:', e);
-    document.getElementById('loading').innerHTML = `<b style="color:#ef5350;">Error loading data:</b> ${e.message}<br>Please refresh the page to try again.`;
-  }
-}
-
-if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', init);
-} else {
-  init();
-}
-</script>
+        // Запуск!
+        fetchAndRenderData();
+    </script>
 </body>
 </html>
