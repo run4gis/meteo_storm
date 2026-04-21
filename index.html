@@ -317,10 +317,14 @@ async function fetchAll() {
 
   let kpSuccess = false, pressureSuccess = false;
 
-  // Helper to fetch with timeout
+  // Helper to fetch with timeout and prevent caching
   const fetchWithTimeout = (url, timeout = 5000) => {
+    // Append a timestamp to strictly bypass browser cache
+    const separator = url.includes('?') ? '&' : '?';
+    const cacheBusterUrl = `${url}${separator}_t=${Date.now()}`;
+    
     return Promise.race([
-      fetch(url),
+      fetch(cacheBusterUrl, { cache: 'no-store' }),
       new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout')), timeout))
     ]);
   };
@@ -947,6 +951,7 @@ async function init() {
         renderAlerts();
         renderRecommendations();
         renderDailyTable();
+        document.getElementById('genTime').textContent = new Date().toLocaleString('en-GB');
       } catch (e) {
         console.error('Refresh error:', e);
         const status = document.getElementById('dataStatus');
@@ -970,6 +975,7 @@ async function init() {
         renderAlerts();
         renderRecommendations();
         renderDailyTable();
+        document.getElementById('genTime').textContent = new Date().toLocaleString('en-GB');
         console.log('Auto-refresh successful');
       } catch (e) {
         console.error('Auto-refresh error:', e);
