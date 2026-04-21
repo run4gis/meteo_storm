@@ -304,9 +304,6 @@ function fmtDay(iso) {
   return new Date(iso).toLocaleDateString('en-GB', { weekday:'short' });
 }
 
-// ============================================================
-// DATA FETCHING
-// ============================================================
 async function fetchAll() {
   console.log('Fetching real data from APIs...');
   const isOnline = navigator.onLine;
@@ -319,9 +316,17 @@ async function fetchAll() {
 
   let kpSuccess = false, pressureSuccess = false;
 
+  // Helper to fetch with timeout
+  const fetchWithTimeout = (url, timeout = 5000) => {
+    return Promise.race([
+      fetch(url),
+      new Promise((_, reject) => setTimeout(() => reject(new Error('API timeout')), timeout))
+    ]);
+  };
+
   // Parse Kp index (observed)
   try {
-    const kpRes = await fetch(API_KP);
+    const kpRes = await fetchWithTimeout(API_KP);
     if (kpRes.ok) {
       const kpJson = await kpRes.json();
       if (Array.isArray(kpJson) && kpJson[0]?.time) {
@@ -340,7 +345,7 @@ async function fetchAll() {
 
   // Parse Kp forecast
   try {
-    const kpFcRes = await fetch(API_KP_FORECAST);
+    const kpFcRes = await fetchWithTimeout(API_KP_FORECAST);
     if (kpFcRes.ok) {
       const kpFcJson = await kpFcRes.json();
       if (Array.isArray(kpFcJson) && kpFcJson[0]?.issuedTime) {
@@ -362,7 +367,7 @@ async function fetchAll() {
 
   // Parse pressure from Open-Meteo
   try {
-    const pressureRes = await fetch(API_PRESSURE);
+    const pressureRes = await fetchWithTimeout(API_PRESSURE);
     if (pressureRes.ok) {
       const pressureJson = await pressureRes.json();
       if (pressureJson && pressureJson.hourly) {
@@ -910,30 +915,46 @@ async function init() {
     // Set up refresh button
     document.getElementById('refreshBtn').addEventListener('click', async () => {
       const btn = document.getElementById('refreshBtn');
+      if (btn.disabled) return; // Prevent multiple simultaneous refreshes
+      
       btn.disabled = true;
       btn.textContent = '⏳ Refreshing...';
-      await fetchAll();
-      updateDataStatus();
-      renderStatusCards();
-      renderMainChart();
-      renderAlerts();
-      renderRecommendations();
-      renderDailyTable();
-      btn.disabled = false;
-      btn.textContent = '🔄 Refresh';
+      
+      try {
+        await fetchAll();
+        updateDataStatus();
+        renderStatusCards();
+        renderMainChart();
+        renderAlerts();
+        renderRecommendations();
+        renderDailyTable();
+      } catch (e) {
+        console.error('Refresh error:', e);
+        const status = document.getElementById('dataStatus');
+        status.textContent = '⚠ Refresh failed - ' + e.message;
+        status.style.color = '#ef5350';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '🔄 Refresh';
+      }
     });
 
     // Auto-refresh every 15 minutes
     if (AUTO_REFRESH_TIMER) clearInterval(AUTO_REFRESH_TIMER);
     AUTO_REFRESH_TIMER = setInterval(async () => {
       console.log('Auto-refreshing data...');
-      await fetchAll();
-      updateDataStatus();
-      renderStatusCards();
-      renderMainChart();
-      renderAlerts();
-      renderRecommendations();
-      renderDailyTable();
+      try {
+        await fetchAll();
+        updateDataStatus();
+        renderStatusCards();
+        renderMainChart();
+        renderAlerts();
+        renderRecommendations();
+        renderDailyTable();
+        console.log('Auto-refresh successful');
+      } catch (e) {
+        console.error('Auto-refresh error:', e);
+      }
     }, AUTO_REFRESH_INTERVAL);
 
   } catch (e) {
