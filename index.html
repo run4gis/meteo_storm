@@ -187,6 +187,10 @@
     <div class="location">📍 Chișinău, Moldova (47.01°N, 28.86°E)</div>
     <div class="subtitle">Geomagnetic storms & atmospheric pressure monitoring</div>
     <div class="today-date" id="todayDate">Today</div>
+    <div style="margin-top:12px; font-size:0.85rem; color:#9aa5b8;">
+      <span id="dataStatus">Loading...</span>
+      <button id="refreshBtn" style="margin-left:12px; padding:4px 12px; background:#64b5f6; border:none; border-radius:6px; color:#fff; cursor:pointer; font-size:0.85rem; font-weight:600;">🔄 Refresh</button>
+    </div>
   </header>
 
   <div id="loading"><div class="spinner"></div>Loading data from NOAA & Open-Meteo...</div>
@@ -256,6 +260,10 @@ const API_KP = 'https://services.swpc.noaa.gov/products/planetary-k-index.json';
 const API_KP_FORECAST = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index-forecast.json';
 const API_PRESSURE = `https://api.open-meteo.com/v1/forecast?latitude=${CHISINAU.lat}&longitude=${CHISINAU.lon}&hourly=pressure_msl&forecast_days=16&timezone=auto`;
 
+// Auto-refresh interval (15 minutes)
+const AUTO_REFRESH_INTERVAL = 15 * 60 * 1000;
+let AUTO_REFRESH_TIMER = null;
+
 // ============================================================
 // STATE
 // ============================================================
@@ -263,6 +271,8 @@ let KP_DATA = [];
 let PRESSURE_RAW = { times: [], values: [] };
 let TODAY_ISO = '';
 let CURRENT_HOUR = '';
+let LAST_UPDATE_TIME = null;
+let DATA_FROM_API = false;
 
 // ============================================================
 // HELPERS
@@ -298,58 +308,82 @@ function fmtDay(iso) {
 // DATA FETCHING
 // ============================================================
 async function fetchAll() {
-  if (IS_LOCAL) {
-    console.log('Running locally - using demo data');
+  console.log('Fetching real data from APIs...');
+  const isOnline = navigator.onLine;
+  
+  if (!isOnline) {
+    console.warn('No internet connection - using demo data');
     loadDemoData();
     return;
   }
 
-  const [kpRes, kpFcRes, pressureRes] = await Promise.all([
-    fetch(API_KP).catch(() => null),
-    fetch(API_KP_FORECAST).catch(() => null),
-    fetch(API_PRESSURE).catch(() => null)
-  ]);
+  let kpSuccess = false, pressureSuccess = false;
 
   // Parse Kp index (observed)
   try {
-    const kpJson = kpRes ? await kpRes.json().catch(() => null) : null;
-    if (kpJson && Array.isArray(kpJson) && kpJson[0]?.time) {
-      KP_DATA = kpJson.slice(-56).map(entry => ({
-        t: entry.time?.slice?.(0, 16) || '2026-01-01T00:00',
-        kp: parseFloat(entry.kp_index) || 0,
-        forecast: false
-      }));
+    const kpRes = await fetch(API_KP);
+    if (kpRes.ok) {
+      const kpJson = await kpRes.json();
+      if (Array.isArray(kpJson) && kpJson[0]?.time) {
+        KP_DATA = kpJson.slice(-56).map(entry => ({
+          t: entry.time?.slice?.(0, 16) || '2026-01-01T00:00',
+          kp: parseFloat(entry.kp_index) || 0,
+          forecast: false
+        }));
+        kpSuccess = true;
+        console.log('✓ Kp index data loaded:', KP_DATA.length, 'entries');
+      }
+    } else {
+      console.warn('KP API returned status:', kpRes.status);
     }
-  } catch(e) { console.warn('KP parse error:', e); }
+  } catch(e) { console.warn('KP API error:', e.message); }
 
   // Parse Kp forecast
   try {
-    const kpFcJson = kpFcRes ? await kpFcRes.json().catch(() => null) : null;
-    if (kpFcJson && Array.isArray(kpFcJson) && kpFcJson[0]?.issuedTime) {
-      const fcEntries = kpFcJson.slice(0, 56).map(entry => ({
-        t: entry.issuedTime?.slice?.(0, 16) || '2026-01-01T00:00',
-        kp: parseFloat(entry.kp) || 0,
-        forecast: true
-      }));
-      const existingTimes = new Set(KP_DATA.map(d => d.t));
-      fcEntries.forEach(e => {
-        if (!existingTimes.has(e.t)) KP_DATA.push(e);
-      });
+    const kpFcRes = await fetch(API_KP_FORECAST);
+    if (kpFcRes.ok) {
+      const kpFcJson = await kpFcRes.json();
+      if (Array.isArray(kpFcJson) && kpFcJson[0]?.issuedTime) {
+        const fcEntries = kpFcJson.slice(0, 56).map(entry => ({
+          t: entry.issuedTime?.slice?.(0, 16) || '2026-01-01T00:00',
+          kp: parseFloat(entry.kp) || 0,
+          forecast: true
+        }));
+        const existingTimes = new Set(KP_DATA.map(d => d.t));
+        fcEntries.forEach(e => {
+          if (!existingTimes.has(e.t)) KP_DATA.push(e);
+        });
+        console.log('✓ Kp forecast data loaded:', fcEntries.length, 'entries');
+      }
+    } else {
+      console.warn('KP Forecast API returned status:', kpFcRes.status);
     }
-  } catch(e) { console.warn('KP Forecast parse error:', e); }
+  } catch(e) { console.warn('KP Forecast API error:', e.message); }
 
   // Parse pressure from Open-Meteo
   try {
-    const pressureJson = pressureRes ? await pressureRes.json().catch(() => null) : null;
-    if (pressureJson && pressureJson.hourly) {
-      PRESSURE_RAW.times = pressureJson.hourly.time || [];
-      PRESSURE_RAW.values = pressureJson.hourly.pressure_msl || [];
+    const pressureRes = await fetch(API_PRESSURE);
+    if (pressureRes.ok) {
+      const pressureJson = await pressureRes.json();
+      if (pressureJson && pressureJson.hourly) {
+        PRESSURE_RAW.times = pressureJson.hourly.time || [];
+        PRESSURE_RAW.values = pressureJson.hourly.pressure_msl || [];
+        pressureSuccess = true;
+        console.log('✓ Pressure data loaded:', PRESSURE_RAW.times.length, 'entries');
+      }
+    } else {
+      console.warn('Pressure API returned status:', pressureRes.status);
     }
-  } catch(e) { console.warn('Pressure parse error:', e); }
+  } catch(e) { console.warn('Pressure API error:', e.message); }
 
-  // Fallback if APIs failed
-  if (!KP_DATA.length || !KP_DATA[0]?.t || !PRESSURE_RAW.times.length) {
+  // Check if we got real data
+  if (kpSuccess && pressureSuccess && KP_DATA.length > 20 && PRESSURE_RAW.times.length > 100) {
+    DATA_FROM_API = true;
+    console.log('✓ Real data successfully loaded from APIs');
+  } else {
+    console.warn('Incomplete data from APIs - using demo data as fallback');
     loadDemoData();
+    DATA_FROM_API = false;
   }
 
   // Set time variables
@@ -357,9 +391,9 @@ async function fetchAll() {
   const localNow = new Date(now.getTime() - now.getTimezoneOffset() * 60000);
   TODAY_ISO = localNow.toISOString().slice(0, 10);
   CURRENT_HOUR = localNow.toISOString().slice(0, 16);
+  LAST_UPDATE_TIME = new Date();
 
-  console.log('KP_DATA:', KP_DATA.length, 'entries');
-  console.log('PRESSURE:', PRESSURE_RAW.times.length, 'entries');
+  console.log('Data fetch complete. KP entries:', KP_DATA.length, 'Pressure entries:', PRESSURE_RAW.times.length);
 }
 
 function loadDemoData() {
@@ -838,6 +872,24 @@ function renderDailyTable() {
 // ============================================================
 // INIT
 // ============================================================
+function updateDataStatus() {
+  const status = document.getElementById('dataStatus');
+  if (!LAST_UPDATE_TIME) {
+    status.textContent = 'Fetching data...';
+    return;
+  }
+  
+  const dataSource = DATA_FROM_API ? '✓ Real data from NOAA/Open-Meteo' : '⚠ Demo data (API unavailable)';
+  const timeStr = LAST_UPDATE_TIME.toLocaleTimeString('en-GB');
+  status.textContent = `${dataSource} · Updated: ${timeStr}`;
+  
+  if (DATA_FROM_API) {
+    status.style.color = '#66bb6a';
+  } else {
+    status.style.color = '#ffa726';
+  }
+}
+
 async function init() {
   try {
     await fetchAll();
@@ -845,6 +897,7 @@ async function init() {
     document.getElementById('todayDate').textContent = '📅 ' + fmtDateLong(TODAY_ISO);
     document.getElementById('genTime').textContent = new Date().toLocaleString('en-GB');
 
+    updateDataStatus();
     renderStatusCards();
     renderMainChart();
     renderAlerts();
@@ -853,6 +906,36 @@ async function init() {
 
     document.getElementById('loading').style.display = 'none';
     document.getElementById('mainContent').style.display = 'block';
+
+    // Set up refresh button
+    document.getElementById('refreshBtn').addEventListener('click', async () => {
+      const btn = document.getElementById('refreshBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Refreshing...';
+      await fetchAll();
+      updateDataStatus();
+      renderStatusCards();
+      renderMainChart();
+      renderAlerts();
+      renderRecommendations();
+      renderDailyTable();
+      btn.disabled = false;
+      btn.textContent = '🔄 Refresh';
+    });
+
+    // Auto-refresh every 15 minutes
+    if (AUTO_REFRESH_TIMER) clearInterval(AUTO_REFRESH_TIMER);
+    AUTO_REFRESH_TIMER = setInterval(async () => {
+      console.log('Auto-refreshing data...');
+      await fetchAll();
+      updateDataStatus();
+      renderStatusCards();
+      renderMainChart();
+      renderAlerts();
+      renderRecommendations();
+      renderDailyTable();
+    }, AUTO_REFRESH_INTERVAL);
+
   } catch (e) {
     console.error('Init error:', e);
     document.getElementById('loading').innerHTML = `<b style="color:#ef5350;">Error loading data:</b> ${e.message}<br>Please refresh the page to try again.`;
