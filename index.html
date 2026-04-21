@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MeteoGuard Chișinău (Live)</title>
+    <title>MeteoGuard Chisinau (Live)</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.plot.ly/plotly-2.24.1.min.js"></script>
     <style>
@@ -17,18 +17,18 @@
     <div class="max-w-6xl mx-auto">
         <header class="mb-8 border-b border-gray-700 pb-4">
             <h1 class="text-3xl font-bold flex items-center gap-3">
-                🌤️ MeteoGuard Chișinău <span class="text-xs bg-green-600 text-white px-2 py-1 rounded-full ml-2 animate-pulse">LIVE DATA</span>
+                🌤️ MeteoGuard Chisinau <span class="text-xs bg-green-600 text-white px-2 py-1 rounded-full ml-2 animate-pulse">LIVE DATA</span>
             </h1>
-            <p class="text-gray-400 mt-2">Текущая дата: <span id="currentDate" class="font-semibold text-white">Обновление...</span></p>
+            <p class="text-gray-400 mt-2">Текущее время: <span id="currentDate" class="font-semibold text-white">Обновление...</span></p>
         </header>
 
-        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📢 Текущий статус (Online)</h2>
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📢 Текущий статус (Прямо сейчас)</h2>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="statusCards" style="opacity: 0.5;">
             
             <div id="kpCard" class="bg-gray-800 rounded-lg p-5 shadow-lg transition-colors duration-500">
                 <div class="flex items-center gap-2 text-blue-400 mb-2">
-                    <span class="text-xl">🧲</span> <h3 class="font-semibold">Магнитная буря (Max за сегодня):</h3>
+                    <span class="text-xl">🧲</span> <h3 class="font-semibold">Магнитная активность (Текущая):</h3>
                 </div>
                 <p id="kpValue" class="text-4xl font-bold text-white mb-1">-- Kp</p>
                 <p id="kpDesc" class="text-sm text-gray-400 italic">Загрузка...</p>
@@ -36,7 +36,7 @@
 
             <div class="bg-gray-800 rounded-lg p-5 border-l-4 border-blue-500 shadow-lg">
                 <div class="flex items-center gap-2 text-blue-400 mb-2">
-                    <span class="text-xl">🌡️</span> <h3 class="font-semibold">Давление (Ср. за сегодня):</h3>
+                    <span class="text-xl">🌡️</span> <h3 class="font-semibold">Давление (Текущее):</h3>
                 </div>
                 <p id="pressureValue" class="text-4xl font-bold text-white mb-1">-- мм</p>
                 <p id="pressureDesc" class="text-sm text-gray-400 italic">Загрузка...</p>
@@ -54,12 +54,12 @@
 
         </div>
 
-        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📈 Динамика: Неделя до и Неделя после (Прогноз)</h2>
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📈 Детальная динамика (Шаг: Давление 2ч / Kp 3ч)</h2>
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700 relative">
             <div id="loadingOverlay" class="absolute inset-0 bg-gray-800 z-10 flex items-center justify-center text-xl text-blue-400 font-bold">
                 Синхронизация с метеостанциями...
             </div>
-            <div id="meteoChart" style="width: 100%; height: 450px;"></div>
+            <div id="meteoChart" style="width: 100%; height: 500px;"></div>
         </div>
 
     </div>
@@ -67,83 +67,85 @@
     <script>
         async function fetchAndRenderData() {
             try {
-                // 1. Дата
-                const todayObj = new Date();
-                const displayOptions = { day: 'numeric', month: 'long', year: 'numeric' };
-                document.getElementById('currentDate').innerText = todayObj.toLocaleDateString('ru-RU', displayOptions);
+                // 1. Временные метки
+                const now = new Date();
+                const displayOptions = { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+                document.getElementById('currentDate').innerText = now.toLocaleDateString('ru-RU', displayOptions);
 
-                // 2. Давление (Open-Meteo)
+                // Вычисляем границы графика (7 дней назад, 7 дней вперед)
+                const pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                const futureDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
+                
+                // Формат YYYY-MM-DD HH:mm для Plotly
+                const formatDateForPlotly = (date) => {
+                    const pad = (n) => n.toString().padStart(2, '0');
+                    return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+                };
+                const nowStr = formatDateForPlotly(now);
+
+                // 2. Давление (Open-Meteo) - Шаг 2 часа
                 const meteoUrl = 'https://api.open-meteo.com/v1/forecast?latitude=47.0105&longitude=28.8638&hourly=surface_pressure&past_days=7&forecast_days=7&timezone=Europe%2FChisinau';
                 const meteoRes = await fetch(meteoUrl);
-                if (!meteoRes.ok) throw new Error("Ошибка API погоды (Open-Meteo)");
+                if (!meteoRes.ok) throw new Error("Ошибка API погоды");
                 const meteoData = await meteoRes.json();
 
-                const pressureByDate = {};
-                for(let i = 0; i < meteoData.hourly.time.length; i++) {
+                const pressureDates = [];
+                const pressureValues = [];
+                let currentPressure = 760;
+                let minTimeDiff = Infinity;
+
+                for(let i = 0; i < meteoData.hourly.time.length; i += 2) { // Берем каждое второе значение (2 часа)
                     if (!meteoData.hourly.time[i]) continue;
-                    const date = meteoData.hourly.time[i].split('T')[0];
-                    const p = meteoData.hourly.surface_pressure[i];
-                    if(p == null) continue;
-                    if(!pressureByDate[date]) pressureByDate[date] = { sum: 0, count: 0 };
-                    pressureByDate[date].sum += p;
-                    pressureByDate[date].count += 1;
+                    
+                    // Форматируем время в YYYY-MM-DD HH:mm
+                    const timeStr = meteoData.hourly.time[i].replace('T', ' ');
+                    const p = Math.round(meteoData.hourly.surface_pressure[i] * 0.750062);
+                    
+                    if(p == null || isNaN(p)) continue;
+                    
+                    pressureDates.push(timeStr);
+                    pressureValues.push(p);
+
+                    // Ищем значение давления, ближайшее к текущему моменту
+                    const dataTime = new Date(meteoData.hourly.time[i]).getTime();
+                    const diff = Math.abs(now.getTime() - dataTime);
+                    if (diff < minTimeDiff) {
+                        minTimeDiff = diff;
+                        currentPressure = p;
+                    }
                 }
 
-                const chartDates = Object.keys(pressureByDate).sort();
-                const pressureFinal = chartDates.map(d => Math.round((pressureByDate[d].sum / pressureByDate[d].count) * 0.750062));
-
-                // 3. Kp-индекс (NOAA - работает на GitHub Pages)
-                let kpHistory = [];
+                // 3. Kp-индекс (NOAA) - Шаг 3 часа (стандарт)
                 const noaaUrl = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'; 
-                
                 const noaaRes = await fetch(noaaUrl);
                 if (!noaaRes.ok) throw new Error("Сервер NOAA недоступен");
                 const noaaRaw = await noaaRes.json();
                 
-                let currentDayKp = 0;
-                let lastSeenDate = "";
+                const kpDates = [];
+                const kpValues = [];
+                let currentKp = 0;
 
-                // Парсим ответ NOAA с предохранителями
                 for (let i = 1; i < noaaRaw.length; i++) {
                     if (!noaaRaw[i] || !noaaRaw[i][0] || noaaRaw[i].length < 2) continue; 
 
-                    const dateStr = String(noaaRaw[i][0]);
-                    const date = dateStr.split(' ')[0];
+                    // NOAA отдает время в формате "YYYY-MM-DD HH:mm:00.000"
+                    const dateStr = String(noaaRaw[i][0]).substring(0, 16); // Обрезаем секунды
                     const kp = parseFloat(noaaRaw[i][1]);
                     
                     if (isNaN(kp)) continue; 
 
-                    if (date !== lastSeenDate) {
-                        if (lastSeenDate !== "") kpHistory.push(currentDayKp);
-                        lastSeenDate = date;
-                        currentDayKp = kp;
-                    } else {
-                        if (kp > currentDayKp) currentDayKp = kp; 
-                    }
-                }
-                kpHistory.push(currentDayKp);
-
-                // 4. Привязка дат
-                const todayIdx = 7; 
-                const kpFinal = new Array(chartDates.length).fill(null);
-                let histIdx = kpHistory.length - 1;
-                for (let i = todayIdx; i >= 0 && histIdx >= 0; i--) {
-                    kpFinal[i] = Math.round(kpHistory[histIdx]);
-                    histIdx--;
+                    kpDates.push(dateStr);
+                    kpValues.push(kp);
+                    currentKp = kp; // Последнее значение в массиве - самое свежее
                 }
 
-                // 5. Интерфейс
-                const currentPressure = pressureFinal[todayIdx];
-                let currentKp = kpFinal[todayIdx];
-                if (currentKp === null || isNaN(currentKp)) currentKp = kpFinal[todayIdx - 1];
-                if (currentKp === null || isNaN(currentKp)) currentKp = 0;
-
+                // 4. Обновление карточек интерфейса
                 document.getElementById('kpValue').innerText = `${currentKp} Kp`;
                 document.getElementById('pressureValue').innerText = `${currentPressure} мм`;
+                
                 const pressDiff = currentPressure - 760;
                 document.getElementById('pressureDesc').innerText = pressDiff >= 0 ? `(+${pressDiff} мм от нормы)` : `(${pressDiff} мм от нормы)`;
 
-                // Цвета карточек
                 const kpCard = document.getElementById('kpCard');
                 const alertCard = document.getElementById('alertCard');
                 const alertTitle = document.getElementById('alertTitle');
@@ -154,58 +156,69 @@
                     if (currentPressure < 758) {
                         alertTitle.innerHTML = "⚠️ КРИТИЧЕСКИЙ ПЕРИОД";
                         alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
-                        alertText.innerText = "Риск высокой погрешности GNSS. Сочетание бури и низкого давления.";
+                        alertText.innerText = "Риск высокой погрешности GNSS/RTK. Сочетание бури и низкого давления.";
                     } else {
                         alertTitle.innerHTML = "🟡 ВНИМАНИЕ: МАГНИТНАЯ БУРЯ";
                         alertTitle.className = "text-yellow-400 font-bold text-lg mb-2 flex items-center gap-2";
-                        alertText.innerText = "Геомагнитное возмущение. Возможна утомляемость.";
+                        alertText.innerText = "Геомагнитное возмущение. Возможна утомляемость и погрешность приборов.";
                     }
                 } else {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-green-500 shadow-lg";
                     alertTitle.innerHTML = "✅ СТАБИЛЬНО";
                     alertTitle.className = "text-green-400 font-bold text-lg mb-2 flex items-center gap-2";
-                    alertText.innerText = "Условия для работы в норме.";
+                    alertText.innerText = "Условия для работы в норме. GNSS работает стабильно.";
                 }
                 document.getElementById('statusCards').style.opacity = "1";
 
-                // 6. ГРАФИК С ЦЕНТРИРОВАНИЕМ И ЛИНИЕЙ 760
-                const chartDatesFormatted = chartDates.map(d => {
-                    const dateObj = new Date(d);
-                    return dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
-                });
-                const todayMarker = chartDatesFormatted[todayIdx];
-
+                // 5. Отрисовка графика (Time Series)
                 const tracePressure = {
-                    x: chartDatesFormatted, y: pressureFinal,
-                    name: 'Давление (мм)', type: 'scatter', mode: 'lines+markers',
-                    line: { color: '#00d2ff', width: 3, shape: 'spline' }, yaxis: 'y1'
+                    x: pressureDates, 
+                    y: pressureValues,
+                    name: 'Давление (мм)', 
+                    type: 'scatter', 
+                    mode: 'lines+markers',
+                    line: { color: '#00d2ff', width: 2, shape: 'spline' }, 
+                    marker: { size: 4 },
+                    yaxis: 'y1'
                 };
 
                 const traceKp = {
-                    x: chartDatesFormatted, y: kpFinal,
-                    name: 'Kp-индекс', type: 'bar',
-                    marker: { color: kpFinal.map(v => v >= 5 ? '#ff4b4b' : v >= 4 ? '#ffa500' : '#00cc96') },
+                    x: kpDates, 
+                    y: kpValues,
+                    name: 'Kp-индекс', 
+                    type: 'bar',
+                    width: 3 * 60 * 60 * 1000, // Ширина столбца = 3 часа (в миллисекундах)
+                    marker: { color: kpValues.map(v => v >= 5 ? '#ff4b4b' : v >= 4 ? '#ffa500' : '#00cc96') },
+                    opacity: 0.8,
                     yaxis: 'y2'
                 };
 
                 const layout = {
                     paper_bgcolor: 'rgba(0,0,0,0)', plot_bgcolor: 'rgba(0,0,0,0)',
                     font: { color: '#e5e7eb', family: 'Inter, sans-serif' },
-                    margin: { t: 50, b: 40, l: 50, r: 50 }, hovermode: 'x unified',
+                    margin: { t: 50, b: 50, l: 50, r: 50 }, 
+                    hovermode: 'x unified',
                     
-                    // Центрирование сегодня
+                    // Ось X (Непрерывное время)
                     xaxis: { 
-                        range: [todayIdx - 3.5, todayIdx + 3.5], 
-                        gridcolor: '#374151'
+                        type: 'date',
+                        range: [formatDateForPlotly(pastDate), formatDateForPlotly(futureDate)], // Строго +- 7 дней
+                        gridcolor: '#374151',
+                        tickformat: '%d %b\n%H:%00' // Формат подписи: 18 апр, 14:00
                     },
 
                     yaxis: { title: 'Давление (мм)', range: [740, 780], gridcolor: '#374151', zeroline: false },
                     yaxis2: { title: 'Kp-индекс', overlaying: 'y', side: 'right', range: [0, 9], showgrid: false },
                     
                     shapes: [
-                        // Линия "Сегодня"
-                        { type: 'line', x0: todayMarker, x1: todayMarker, y0: 0, y1: 1, yref: 'paper', line: { color: '#ffffff', width: 2, dash: 'dot' } },
-                        // ЛИНИЯ СРЕДНЕГО ДАВЛЕНИЯ (760 мм)
+                        // Вертикальная линия "Прямо сейчас"
+                        { 
+                            type: 'line', 
+                            x0: nowStr, x1: nowStr, 
+                            y0: 0, y1: 1, yref: 'paper', 
+                            line: { color: '#ffffff', width: 2, dash: 'dot' } 
+                        },
+                        // Горизонтальная линия "Норма 760"
                         { 
                             type: 'line', 
                             x0: 0, x1: 1, xref: 'paper', 
@@ -214,8 +227,10 @@
                         }
                     ],
                     annotations: [
-                        { x: todayMarker, y: 1.05, yref: 'paper', text: 'СЕГОДНЯ', showarrow: false, font: { color: '#ffffff', weight: 'bold' } },
-                        // Метка для среднего давления
+                        { 
+                            x: nowStr, y: 1.05, yref: 'paper', 
+                            text: 'СЕЙЧАС', showarrow: false, font: { color: '#ffffff', weight: 'bold' } 
+                        },
                         { 
                             xref: 'paper', x: 0.02, 
                             y: 760, text: 'Норма 760 мм', 
