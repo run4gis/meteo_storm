@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -19,45 +19,45 @@
             <h1 class="text-3xl font-bold flex items-center gap-3">
                 🌤️ MeteoGuard Chisinau <span class="text-xs bg-green-600 text-white px-2 py-1 rounded-full ml-2 animate-pulse">LIVE DATA</span>
             </h1>
-            <p class="text-gray-400 mt-2">Текущее время: <span id="currentDate" class="font-semibold text-white">Обновление...</span></p>
+            <p class="text-gray-400 mt-2">Current time: <span id="currentDate" class="font-semibold text-white">Updating...</span></p>
         </header>
 
-        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📢 Текущий статус (Прямо сейчас)</h2>
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📢 Current Status (Live)</h2>
 
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-10" id="statusCards" style="opacity: 0.5;">
             
             <div id="kpCard" class="bg-gray-800 rounded-lg p-5 shadow-lg transition-colors duration-500">
                 <div class="flex items-center gap-2 text-blue-400 mb-2">
-                    <span class="text-xl">🧲</span> <h3 class="font-semibold">Магнитная активность (Текущая):</h3>
+                    <span class="text-xl">🧲</span> <h3 class="font-semibold">Geomagnetic Activity:</h3>
                 </div>
                 <p id="kpValue" class="text-4xl font-bold text-white mb-1">-- Kp</p>
-                <p id="kpDesc" class="text-sm text-gray-400 italic">Загрузка...</p>
+                <p id="kpDesc" class="text-sm text-gray-400 italic">Loading...</p>
             </div>
 
             <div class="bg-gray-800 rounded-lg p-5 border-l-4 border-blue-500 shadow-lg">
                 <div class="flex items-center gap-2 text-blue-400 mb-2">
-                    <span class="text-xl">🌡️</span> <h3 class="font-semibold">Давление (Текущее):</h3>
+                    <span class="text-xl">🌡️</span> <h3 class="font-semibold">Atmospheric Pressure:</h3>
                 </div>
-                <p id="pressureValue" class="text-4xl font-bold text-white mb-1">-- мм</p>
-                <p id="pressureDesc" class="text-sm text-gray-400 italic">Загрузка...</p>
+                <p id="pressureValue" class="text-4xl font-bold text-white mb-1">-- mmHg</p>
+                <p id="pressureDesc" class="text-sm text-gray-400 italic">Loading...</p>
             </div>
 
             <div id="alertCard" class="bg-gray-800 border border-gray-600 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500">
                 <div id="alertLine" class="absolute top-0 left-0 w-full h-1 bg-gray-500"></div>
                 <h3 id="alertTitle" class="text-gray-300 font-bold text-lg mb-2 flex items-center gap-2">
-                    ⏳ Анализ данных...
+                    ⏳ Analyzing data...
                 </h3>
                 <p id="alertText" class="text-sm text-gray-400 leading-relaxed">
-                    Подключение к серверам NOAA и Open-Meteo. Пожалуйста, подождите.
+                    Connecting to NOAA and Open-Meteo servers. Please wait.
                 </p>
             </div>
 
         </div>
 
-        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📈 Детальная динамика (Шаг: Давление 2ч / Kp 3ч)</h2>
+        <h2 class="text-xl font-bold mb-4 flex items-center gap-2">📈 Detailed Dynamics (Step: Pressure 2h / Kp 3h)</h2>
         <div class="bg-gray-800 p-4 rounded-lg shadow-lg border border-gray-700 relative">
             <div id="loadingOverlay" class="absolute inset-0 bg-gray-800 z-10 flex items-center justify-center text-xl text-blue-400 font-bold">
-                Синхронизация с метеостанциями...
+                Synchronizing with weather stations...
             </div>
             <div id="meteoChart" style="width: 100%; height: 500px;"></div>
         </div>
@@ -67,26 +67,24 @@
     <script>
         async function fetchAndRenderData() {
             try {
-                // 1. Временные метки
+                // 1. Time setup
                 const now = new Date();
                 const displayOptions = { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' };
-                document.getElementById('currentDate').innerText = now.toLocaleDateString('ru-RU', displayOptions);
+                document.getElementById('currentDate').innerText = now.toLocaleDateString('en-GB', displayOptions);
 
-                // Вычисляем границы графика (7 дней назад, 7 дней вперед)
                 const pastDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
                 const futureDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
                 
-                // Формат YYYY-MM-DD HH:mm для Plotly
                 const formatDateForPlotly = (date) => {
                     const pad = (n) => n.toString().padStart(2, '0');
                     return `${date.getFullYear()}-${pad(date.getMonth()+1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
                 };
                 const nowStr = formatDateForPlotly(now);
 
-                // 2. Давление (Open-Meteo) - Шаг 2 часа
+                // 2. Pressure (Open-Meteo) - 2h Step
                 const meteoUrl = 'https://api.open-meteo.com/v1/forecast?latitude=47.0105&longitude=28.8638&hourly=surface_pressure&past_days=7&forecast_days=7&timezone=Europe%2FChisinau';
                 const meteoRes = await fetch(meteoUrl);
-                if (!meteoRes.ok) throw new Error("Ошибка API погоды");
+                if (!meteoRes.ok) throw new Error("Weather API Error");
                 const meteoData = await meteoRes.json();
 
                 const pressureDates = [];
@@ -94,10 +92,9 @@
                 let currentPressure = 760;
                 let minTimeDiff = Infinity;
 
-                for(let i = 0; i < meteoData.hourly.time.length; i += 2) { // Берем каждое второе значение (2 часа)
+                for(let i = 0; i < meteoData.hourly.time.length; i += 2) { 
                     if (!meteoData.hourly.time[i]) continue;
                     
-                    // Форматируем время в YYYY-MM-DD HH:mm
                     const timeStr = meteoData.hourly.time[i].replace('T', ' ');
                     const p = Math.round(meteoData.hourly.surface_pressure[i] * 0.750062);
                     
@@ -106,7 +103,6 @@
                     pressureDates.push(timeStr);
                     pressureValues.push(p);
 
-                    // Ищем значение давления, ближайшее к текущему моменту
                     const dataTime = new Date(meteoData.hourly.time[i]).getTime();
                     const diff = Math.abs(now.getTime() - dataTime);
                     if (diff < minTimeDiff) {
@@ -115,10 +111,10 @@
                     }
                 }
 
-                // 3. Kp-индекс (NOAA) - Шаг 3 часа (стандарт)
+                // 3. Kp-index (NOAA) - 3h Step
                 const noaaUrl = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'; 
                 const noaaRes = await fetch(noaaUrl);
-                if (!noaaRes.ok) throw new Error("Сервер NOAA недоступен");
+                if (!noaaRes.ok) throw new Error("NOAA server unavailable");
                 const noaaRaw = await noaaRes.json();
                 
                 const kpDates = [];
@@ -128,23 +124,22 @@
                 for (let i = 1; i < noaaRaw.length; i++) {
                     if (!noaaRaw[i] || !noaaRaw[i][0] || noaaRaw[i].length < 2) continue; 
 
-                    // NOAA отдает время в формате "YYYY-MM-DD HH:mm:00.000"
-                    const dateStr = String(noaaRaw[i][0]).substring(0, 16); // Обрезаем секунды
+                    const dateStr = String(noaaRaw[i][0]).substring(0, 16); 
                     const kp = parseFloat(noaaRaw[i][1]);
                     
                     if (isNaN(kp)) continue; 
 
                     kpDates.push(dateStr);
                     kpValues.push(kp);
-                    currentKp = kp; // Последнее значение в массиве - самое свежее
+                    currentKp = kp; 
                 }
 
-                // 4. Обновление карточек интерфейса
+                // 4. Update UI Cards
                 document.getElementById('kpValue').innerText = `${currentKp} Kp`;
-                document.getElementById('pressureValue').innerText = `${currentPressure} мм`;
+                document.getElementById('pressureValue').innerText = `${currentPressure} mmHg`;
                 
                 const pressDiff = currentPressure - 760;
-                document.getElementById('pressureDesc').innerText = pressDiff >= 0 ? `(+${pressDiff} мм от нормы)` : `(${pressDiff} мм от нормы)`;
+                document.getElementById('pressureDesc').innerText = pressDiff >= 0 ? `(+${pressDiff} from norm)` : `(${pressDiff} from norm)`;
 
                 const kpCard = document.getElementById('kpCard');
                 const alertCard = document.getElementById('alertCard');
@@ -154,29 +149,32 @@
                 if (currentKp >= 5) {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-red-500 shadow-lg";
                     if (currentPressure < 758) {
-                        alertTitle.innerHTML = "⚠️ КРИТИЧЕСКИЙ ПЕРИОД";
+                        alertTitle.innerHTML = "⚠️ CRITICAL PERIOD";
                         alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
-                        alertText.innerText = "Риск высокой погрешности GNSS/RTK. Сочетание бури и низкого давления.";
+                        alertText.innerText = "High GNSS/RTK error risk. Storm and low pressure combination.";
                     } else {
-                        alertTitle.innerHTML = "🟡 ВНИМАНИЕ: МАГНИТНАЯ БУРЯ";
+                        alertTitle.innerHTML = "🟡 WARNING: GEOMAGNETIC STORM";
                         alertTitle.className = "text-yellow-400 font-bold text-lg mb-2 flex items-center gap-2";
-                        alertText.innerText = "Геомагнитное возмущение. Возможна утомляемость и погрешность приборов.";
+                        alertText.innerText = "Geomagnetic disturbance. Possible fatigue and instrument error.";
                     }
                 } else {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-green-500 shadow-lg";
-                    alertTitle.innerHTML = "✅ СТАБИЛЬНО";
+                    alertTitle.innerHTML = "✅ STABLE";
                     alertTitle.className = "text-green-400 font-bold text-lg mb-2 flex items-center gap-2";
-                    alertText.innerText = "Условия для работы в норме. GNSS работает стабильно.";
+                    alertText.innerText = "Normal working conditions. GNSS is stable.";
                 }
                 document.getElementById('statusCards').style.opacity = "1";
 
-                // 5. Отрисовка графика (Time Series)
+                // 5. Render Chart
                 const tracePressure = {
                     x: pressureDates, 
                     y: pressureValues,
-                    name: 'Давление (мм)', 
+                    name: 'Pressure (mmHg)', 
                     type: 'scatter', 
-                    mode: 'lines+markers',
+                    mode: 'lines+markers+text', // Enabled text labels
+                    text: pressureValues,       // Set data labels
+                    textposition: 'top center',
+                    textfont: { size: 9, color: '#00d2ff' },
                     line: { color: '#00d2ff', width: 2, shape: 'spline' }, 
                     marker: { size: 4 },
                     yaxis: 'y1'
@@ -185,9 +183,12 @@
                 const traceKp = {
                     x: kpDates, 
                     y: kpValues,
-                    name: 'Kp-индекс', 
+                    name: 'Kp-index', 
                     type: 'bar',
-                    width: 3 * 60 * 60 * 1000, // Ширина столбца = 3 часа (в миллисекундах)
+                    width: 3 * 60 * 60 * 1000, 
+                    text: kpValues,             // Set data labels
+                    textposition: 'outside',
+                    textfont: { size: 10, color: '#e5e7eb' },
                     marker: { color: kpValues.map(v => v >= 5 ? '#ff4b4b' : v >= 4 ? '#ffa500' : '#00cc96') },
                     opacity: 0.8,
                     yaxis: 'y2'
@@ -199,26 +200,25 @@
                     margin: { t: 50, b: 50, l: 50, r: 50 }, 
                     hovermode: 'x unified',
                     
-                    // Ось X (Непрерывное время)
                     xaxis: { 
                         type: 'date',
-                        range: [formatDateForPlotly(pastDate), formatDateForPlotly(futureDate)], // Строго +- 7 дней
+                        range: [formatDateForPlotly(pastDate), formatDateForPlotly(futureDate)], 
                         gridcolor: '#374151',
-                        tickformat: '%d %b\n%H:%00' // Формат подписи: 18 апр, 14:00
+                        tickformat: '%d %b', // Format: "18 Apr"
+                        dtick: 86400000, // Show a tick exactly every 24 hours (1 day in milliseconds)
+                        tickangle: -45
                     },
 
-                    yaxis: { title: 'Давление (мм)', range: [740, 780], gridcolor: '#374151', zeroline: false },
-                    yaxis2: { title: 'Kp-индекс', overlaying: 'y', side: 'right', range: [0, 9], showgrid: false },
+                    yaxis: { title: 'Pressure (mmHg)', range: [740, 785], gridcolor: '#374151', zeroline: false },
+                    yaxis2: { title: 'Kp-index', overlaying: 'y', side: 'right', range: [0, 9], showgrid: false },
                     
                     shapes: [
-                        // Вертикальная линия "Прямо сейчас"
                         { 
                             type: 'line', 
                             x0: nowStr, x1: nowStr, 
                             y0: 0, y1: 1, yref: 'paper', 
                             line: { color: '#ffffff', width: 2, dash: 'dot' } 
                         },
-                        // Горизонтальная линия "Норма 760"
                         { 
                             type: 'line', 
                             x0: 0, x1: 1, xref: 'paper', 
@@ -229,11 +229,11 @@
                     annotations: [
                         { 
                             x: nowStr, y: 1.05, yref: 'paper', 
-                            text: 'СЕЙЧАС', showarrow: false, font: { color: '#ffffff', weight: 'bold' } 
+                            text: 'NOW', showarrow: false, font: { color: '#ffffff', weight: 'bold' } 
                         },
                         { 
                             xref: 'paper', x: 0.02, 
-                            y: 760, text: 'Норма 760 мм', 
+                            y: 760, text: 'Norm 760 mmHg', 
                             showarrow: false, font: { size: 10, color: 'rgba(255, 255, 255, 0.6)' },
                             yanchor: 'bottom'
                         }
@@ -244,8 +244,8 @@
                 Plotly.newPlot('meteoChart', [traceKp, tracePressure], layout, { responsive: true, displayModeBar: false });
 
             } catch (error) {
-                console.error("Ошибка:", error);
-                document.getElementById('loadingOverlay').innerHTML = `<span class='text-red-500'>Ошибка сети: ${error.message}</span>`;
+                console.error("Error:", error);
+                document.getElementById('loadingOverlay').innerHTML = `<span class='text-red-500'>Network error: ${error.message}</span>`;
             }
         }
         
