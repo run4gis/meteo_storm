@@ -273,6 +273,7 @@ let TODAY_ISO = '';
 let CURRENT_HOUR = '';
 let LAST_UPDATE_TIME = null;
 let DATA_FROM_API = false;
+let CHART_INSTANCE = null;
 
 // ============================================================
 // HELPERS
@@ -527,7 +528,14 @@ function renderMainChart() {
   });
 
   const ctx = document.getElementById('mainChart').getContext('2d');
-  new Chart(ctx, {
+  
+  // Destroy previous chart instance if it exists
+  if (CHART_INSTANCE) {
+    CHART_INSTANCE.destroy();
+    CHART_INSTANCE = null;
+  }
+  
+  CHART_INSTANCE = new Chart(ctx, {
     type: 'bar',
     data: {
       datasets: [
