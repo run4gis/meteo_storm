@@ -535,7 +535,12 @@ function renderMainChart() {
     CHART_INSTANCE = null;
   }
   
-  CHART_INSTANCE = new Chart(ctx, {
+  // Reset canvas completely
+  const canvas = document.getElementById('mainChart');
+  canvas.width = canvas.width; // Reset canvas
+  const freshCtx = canvas.getContext('2d');
+  
+  CHART_INSTANCE = new Chart(freshCtx, {
     type: 'bar',
     data: {
       datasets: [
