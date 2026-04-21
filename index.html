@@ -48,7 +48,7 @@
                     ⏳ Анализ данных...
                 </h3>
                 <p id="alertText" class="text-sm text-gray-400 leading-relaxed">
-                    Подключение к серверам и анализ геофизических факторов...
+                    Подключение к серверам NOAA и Open-Meteo. Пожалуйста, подождите.
                 </p>
             </div>
 
@@ -75,6 +75,7 @@
                 // 2. Давление (Open-Meteo)
                 const meteoUrl = 'https://api.open-meteo.com/v1/forecast?latitude=47.0105&longitude=28.8638&hourly=surface_pressure&past_days=7&forecast_days=7&timezone=Europe%2FChisinau';
                 const meteoRes = await fetch(meteoUrl);
+                if (!meteoRes.ok) throw new Error("Ошибка API погоды (Open-Meteo)");
                 const meteoData = await meteoRes.json();
 
                 const pressureByDate = {};
@@ -91,28 +92,38 @@
                 const chartDates = Object.keys(pressureByDate).sort();
                 const pressureFinal = chartDates.map(d => Math.round((pressureByDate[d].sum / pressureByDate[d].count) * 0.750062));
 
-                // 3. Kp-индекс (GFZ Potsdam API)
+                // 3. Kp-индекс (NOAA - работает на GitHub Pages)
                 let kpHistory = [];
-                const gfzUrl = 'https://kp.gfz-potsdam.de/app/json/?mode=Nowcast'; 
-                const gfzRes = await fetch(gfzUrl);
-                const gfzRaw = await gfzRes.json();
+                const noaaUrl = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'; 
+                
+                const noaaRes = await fetch(noaaUrl);
+                if (!noaaRes.ok) throw new Error("Сервер NOAA недоступен");
+                const noaaRaw = await noaaRes.json();
                 
                 let currentDayKp = 0;
                 let lastSeenDate = "";
-                for (let i = 0; i < gfzRaw.datetime.length; i++) {
-                    const date = gfzRaw.datetime[i].split('T')[0];
-                    const kp = parseFloat(gfzRaw.Kp[i]);
+
+                // Парсим ответ NOAA с предохранителями
+                for (let i = 1; i < noaaRaw.length; i++) {
+                    if (!noaaRaw[i] || !noaaRaw[i][0] || noaaRaw[i].length < 2) continue; 
+
+                    const dateStr = String(noaaRaw[i][0]);
+                    const date = dateStr.split(' ')[0];
+                    const kp = parseFloat(noaaRaw[i][1]);
+                    
+                    if (isNaN(kp)) continue; 
+
                     if (date !== lastSeenDate) {
                         if (lastSeenDate !== "") kpHistory.push(currentDayKp);
                         lastSeenDate = date;
                         currentDayKp = kp;
                     } else {
-                        if (kp > currentDayKp) currentDayKp = kp;
+                        if (kp > currentDayKp) currentDayKp = kp; 
                     }
                 }
                 kpHistory.push(currentDayKp);
 
-                // 4. Расчет индекса "Сегодня"
+                // 4. Привязка дат
                 const todayIdx = 7; 
                 const kpFinal = new Array(chartDates.length).fill(null);
                 let histIdx = kpHistory.length - 1;
@@ -123,7 +134,9 @@
 
                 // 5. Интерфейс
                 const currentPressure = pressureFinal[todayIdx];
-                let currentKp = kpFinal[todayIdx] ?? kpFinal[todayIdx-1] ?? 0;
+                let currentKp = kpFinal[todayIdx];
+                if (currentKp === null || isNaN(currentKp)) currentKp = kpFinal[todayIdx - 1];
+                if (currentKp === null || isNaN(currentKp)) currentKp = 0;
 
                 document.getElementById('kpValue').innerText = `${currentKp} Kp`;
                 document.getElementById('pressureValue').innerText = `${currentPressure} мм`;
@@ -139,20 +152,23 @@
                 if (currentKp >= 5) {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-red-500 shadow-lg";
                     if (currentPressure < 758) {
-                        alertTitle.innerText = "⚠️ КРИТИЧЕСКИЙ ПЕРИОД";
+                        alertTitle.innerHTML = "⚠️ КРИТИЧЕСКИЙ ПЕРИОД";
+                        alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
                         alertText.innerText = "Риск высокой погрешности GNSS. Сочетание бури и низкого давления.";
                     } else {
-                        alertTitle.innerText = "🟡 ВНИМАНИЕ: МАГНИТНАЯ БУРЯ";
+                        alertTitle.innerHTML = "🟡 ВНИМАНИЕ: МАГНИТНАЯ БУРЯ";
+                        alertTitle.className = "text-yellow-400 font-bold text-lg mb-2 flex items-center gap-2";
                         alertText.innerText = "Геомагнитное возмущение. Возможна утомляемость.";
                     }
                 } else {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-green-500 shadow-lg";
-                    alertTitle.innerText = "✅ СТАБИЛЬНО";
+                    alertTitle.innerHTML = "✅ СТАБИЛЬНО";
+                    alertTitle.className = "text-green-400 font-bold text-lg mb-2 flex items-center gap-2";
                     alertText.innerText = "Условия для работы в норме.";
                 }
                 document.getElementById('statusCards').style.opacity = "1";
 
-                // 6. ГРАФИК С ЦЕНТРИРОВАНИЕМ
+                // 6. ГРАФИК С ЦЕНТРИРОВАНИЕМ И ЛИНИЕЙ 760
                 const chartDatesFormatted = chartDates.map(d => {
                     const dateObj = new Date(d);
                     return dateObj.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' });
@@ -179,7 +195,7 @@
                     
                     // Центрирование сегодня
                     xaxis: { 
-                        range: [todayIdx - 3.5, todayIdx + 3.5], // Показываем окно в неделю, где сегодня в центре
+                        range: [todayIdx - 3.5, todayIdx + 3.5], 
                         gridcolor: '#374151'
                     },
 
@@ -198,7 +214,7 @@
                         }
                     ],
                     annotations: [
-                        { x: todayMarker, y: 1.05, yref: 'paper', text: 'СЕГОДНЯ', showarrow: false, font: { weight: 'bold' } },
+                        { x: todayMarker, y: 1.05, yref: 'paper', text: 'СЕГОДНЯ', showarrow: false, font: { color: '#ffffff', weight: 'bold' } },
                         // Метка для среднего давления
                         { 
                             xref: 'paper', x: 0.02, 
@@ -214,9 +230,10 @@
 
             } catch (error) {
                 console.error("Ошибка:", error);
-                document.getElementById('loadingOverlay').innerHTML = "<span class='text-red-500'>Ошибка загрузки. Проверьте localhost.</span>";
+                document.getElementById('loadingOverlay').innerHTML = `<span class='text-red-500'>Ошибка сети: ${error.message}</span>`;
             }
         }
+        
         fetchAndRenderData();
     </script>
 </body>
