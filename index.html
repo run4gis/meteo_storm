@@ -81,7 +81,7 @@
                 };
                 const nowStr = formatDateForPlotly(now);
 
-                // 2. Pressure (Open-Meteo) - 2h Step
+                // 2. Pressure (Open-Meteo)
                 const meteoUrl = 'https://api.open-meteo.com/v1/forecast?latitude=47.0105&longitude=28.8638&hourly=surface_pressure&past_days=7&forecast_days=7&timezone=Europe%2FChisinau';
                 const meteoRes = await fetch(meteoUrl);
                 if (!meteoRes.ok) throw new Error("Weather API Error");
@@ -111,7 +111,7 @@
                     }
                 }
 
-                // 3. Kp-index (NOAA) - 3h Step
+                // 3. Kp-index (NOAA)
                 const noaaUrl = 'https://services.swpc.noaa.gov/products/noaa-planetary-k-index.json'; 
                 const noaaRes = await fetch(noaaUrl);
                 if (!noaaRes.ok) throw new Error("NOAA server unavailable");
@@ -129,13 +129,22 @@
                     
                     if (isNaN(kp)) continue; 
 
+                    const roundedKp = Math.round(kp); // Rounding for cleaner charts
                     kpDates.push(dateStr);
-                    kpValues.push(kp);
-                    currentKp = kp; 
+                    kpValues.push(roundedKp);
+                }
+
+                // Find the last CONFIRMED reading (skip empty ending arrays)
+                for (let i = kpValues.length - 1; i >= 0; i--) {
+                    if (kpValues[i] !== null && !isNaN(kpValues[i])) {
+                        currentKp = kpValues[i];
+                        break;
+                    }
                 }
 
                 // 4. Update UI Cards
                 document.getElementById('kpValue').innerText = `${currentKp} Kp`;
+                document.getElementById('kpDesc').innerText = "(Latest confirmed reading)"; // Fixed loading text
                 document.getElementById('pressureValue').innerText = `${currentPressure} mmHg`;
                 
                 const pressDiff = currentPressure - 760;
@@ -146,23 +155,30 @@
                 const alertTitle = document.getElementById('alertTitle');
                 const alertText = document.getElementById('alertText');
 
+                // Meteo-sensitive Logic Added
                 if (currentKp >= 5) {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-red-500 shadow-lg";
                     if (currentPressure < 758) {
                         alertTitle.innerHTML = "⚠️ CRITICAL PERIOD";
                         alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
-                        alertText.innerText = "High GNSS/RTK error risk. Storm and low pressure combination.";
+                        alertText.innerHTML = "High GNSS error risk. <br><br><span class='text-red-300'><b>Meteo-sensitive alert:</b> High risk of headaches, blood pressure spikes, and fatigue. Rest is highly recommended.</span>";
                     } else {
-                        alertTitle.innerHTML = "🟡 WARNING: GEOMAGNETIC STORM";
-                        alertTitle.className = "text-yellow-400 font-bold text-lg mb-2 flex items-center gap-2";
-                        alertText.innerText = "Geomagnetic disturbance. Possible fatigue and instrument error.";
+                        alertTitle.innerHTML = "🔴 WARNING: GEOMAGNETIC STORM";
+                        alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
+                        alertText.innerHTML = "Geomagnetic disturbance detected. <br><br><span class='text-red-300'><b>Meteo-sensitive alert:</b> High risk of fatigue and migraines. Monitor your well-being.</span>";
                     }
+                } else if (currentKp === 4) {
+                    kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-yellow-500 shadow-lg";
+                    alertTitle.innerHTML = "🟡 NOTICE: ACTIVE BACKGROUND";
+                    alertTitle.className = "text-yellow-400 font-bold text-lg mb-2 flex items-center gap-2";
+                    alertText.innerHTML = "Slight GNSS disturbances possible. <br><br><span class='text-yellow-300'><b>Meteo-sensitive alert:</b> Moderate risk. You may feel slight discomfort, anxiety, or fatigue.</span>";
                 } else {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-green-500 shadow-lg";
                     alertTitle.innerHTML = "✅ STABLE";
                     alertTitle.className = "text-green-400 font-bold text-lg mb-2 flex items-center gap-2";
-                    alertText.innerText = "Normal working conditions. GNSS is stable.";
+                    alertText.innerHTML = "Normal working conditions. GNSS is stable. <br><br><span class='text-green-300'><b>Meteo-sensitive alert:</b> Favorable conditions. No negative impact expected on well-being.</span>";
                 }
+                
                 document.getElementById('statusCards').style.opacity = "1";
 
                 // 5. Render Chart
@@ -171,13 +187,11 @@
                     y: pressureValues,
                     name: 'Pressure (mmHg)', 
                     type: 'scatter', 
-                    mode: 'lines+markers+text', // Enabled text labels
-                    text: pressureValues,       // Set data labels
-                    textposition: 'top center',
-                    textfont: { size: 9, color: '#00d2ff' },
+                    mode: 'lines+markers', // Removed messy text labels from the line
                     line: { color: '#00d2ff', width: 2, shape: 'spline' }, 
                     marker: { size: 4 },
-                    yaxis: 'y1'
+                    yaxis: 'y1',
+                    hovertemplate: '<b>%{x|%H:%M}</b><br>Pressure: %{y} mmHg<extra></extra>' // Time only, single popup
                 };
 
                 const traceKp = {
@@ -186,12 +200,10 @@
                     name: 'Kp-index', 
                     type: 'bar',
                     width: 3 * 60 * 60 * 1000, 
-                    text: kpValues,             // Set data labels
-                    textposition: 'outside',
-                    textfont: { size: 10, color: '#e5e7eb' },
                     marker: { color: kpValues.map(v => v >= 5 ? '#ff4b4b' : v >= 4 ? '#ffa500' : '#00cc96') },
                     opacity: 0.8,
-                    yaxis: 'y2'
+                    yaxis: 'y2',
+                    hovertemplate: '<b>%{x|%H:%M}</b><br>Kp-index: %{y}<extra></extra>' // Time only, single popup
                 };
 
                 const layout = {
@@ -204,8 +216,8 @@
                         type: 'date',
                         range: [formatDateForPlotly(pastDate), formatDateForPlotly(futureDate)], 
                         gridcolor: '#374151',
-                        tickformat: '%d %b', // Format: "18 Apr"
-                        dtick: 86400000, // Show a tick exactly every 24 hours (1 day in milliseconds)
+                        tickformat: '%d %b', 
+                        dtick: 86400000, 
                         tickangle: -45
                     },
 
