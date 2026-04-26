@@ -34,7 +34,7 @@
                 <p id="kpDesc" class="text-sm text-gray-400 italic">Loading...</p>
             </div>
 
-            <div class="bg-gray-800 rounded-lg p-5 border-l-4 border-blue-500 shadow-lg">
+            <div class="bg-gray-800 rounded-lg p-5 border-l-4 border-blue-500 shadow-lg transition-colors duration-500">
                 <div class="flex items-center gap-2 text-blue-400 mb-2">
                     <span class="text-xl">🌡️</span> <h3 class="font-semibold">Atmospheric Pressure:</h3>
                 </div>
@@ -43,7 +43,6 @@
             </div>
 
             <div id="alertCard" class="bg-gray-800 border border-gray-600 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500">
-                <div id="alertLine" class="absolute top-0 left-0 w-full h-1 bg-gray-500"></div>
                 <h3 id="alertTitle" class="text-gray-300 font-bold text-lg mb-2 flex items-center gap-2">
                     ⏳ Analyzing data...
                 </h3>
@@ -129,12 +128,12 @@
                     
                     if (isNaN(kp)) continue; 
 
-                    const roundedKp = Math.round(kp); // Rounding for cleaner charts
+                    const roundedKp = Math.round(kp); 
                     kpDates.push(dateStr);
                     kpValues.push(roundedKp);
                 }
 
-                // Find the last CONFIRMED reading (skip empty ending arrays)
+                // Find the last CONFIRMED reading
                 for (let i = kpValues.length - 1; i >= 0; i--) {
                     if (kpValues[i] !== null && !isNaN(kpValues[i])) {
                         currentKp = kpValues[i];
@@ -144,7 +143,7 @@
 
                 // 4. Update UI Cards
                 document.getElementById('kpValue').innerText = `${currentKp} Kp`;
-                document.getElementById('kpDesc').innerText = "(Latest confirmed reading)"; // Fixed loading text
+                document.getElementById('kpDesc').innerText = "(Latest confirmed reading)"; 
                 document.getElementById('pressureValue').innerText = `${currentPressure} mmHg`;
                 
                 const pressDiff = currentPressure - 760;
@@ -155,25 +154,46 @@
                 const alertTitle = document.getElementById('alertTitle');
                 const alertText = document.getElementById('alertText');
 
-                // Meteo-sensitive Logic Added
+                // Visual color logic for Kp Card
                 if (currentKp >= 5) {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-red-500 shadow-lg";
-                    if (currentPressure < 758) {
-                        alertTitle.innerHTML = "⚠️ CRITICAL PERIOD";
-                        alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
-                        alertText.innerHTML = "High GNSS error risk. <br><br><span class='text-red-300'><b>Meteo-sensitive alert:</b> High risk of headaches, blood pressure spikes, and fatigue. Rest is highly recommended.</span>";
-                    } else {
-                        alertTitle.innerHTML = "🔴 WARNING: GEOMAGNETIC STORM";
-                        alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
-                        alertText.innerHTML = "Geomagnetic disturbance detected. <br><br><span class='text-red-300'><b>Meteo-sensitive alert:</b> High risk of fatigue and migraines. Monitor your well-being.</span>";
-                    }
                 } else if (currentKp === 4) {
                     kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-yellow-500 shadow-lg";
+                } else {
+                    kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-green-500 shadow-lg";
+                }
+
+                // Comprehensive Alert Logic (Checking both Kp AND Pressure)
+                if (currentKp >= 5 && currentPressure < 758) {
+                    alertCard.className = "bg-red-900/40 border border-red-500/50 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
+                    alertTitle.innerHTML = "⚠️ CRITICAL PERIOD";
+                    alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
+                    alertText.innerHTML = "High GNSS error risk. <br><br><span class='text-red-300'><b>Meteo-sensitive alert:</b> Severe risk. Combination of magnetic storm and low pressure. High risk of headaches and blood pressure spikes.</span>";
+                } else if (currentKp >= 5) {
+                    alertCard.className = "bg-red-900/30 border border-red-500/50 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
+                    alertTitle.innerHTML = "🔴 WARNING: GEOMAGNETIC STORM";
+                    alertTitle.className = "text-red-400 font-bold text-lg mb-2 flex items-center gap-2";
+                    alertText.innerHTML = "Geomagnetic disturbance detected. <br><br><span class='text-red-300'><b>Meteo-sensitive alert:</b> High risk of fatigue and migraines. Monitor your well-being.</span>";
+                } else if (currentKp === 4) {
+                    alertCard.className = "bg-yellow-900/30 border border-yellow-500/50 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
                     alertTitle.innerHTML = "🟡 NOTICE: ACTIVE BACKGROUND";
                     alertTitle.className = "text-yellow-400 font-bold text-lg mb-2 flex items-center gap-2";
                     alertText.innerHTML = "Slight GNSS disturbances possible. <br><br><span class='text-yellow-300'><b>Meteo-sensitive alert:</b> Moderate risk. You may feel slight discomfort, anxiety, or fatigue.</span>";
+                } else if (currentPressure <= 753) {
+                    // NEW: Geomagnetic is stable, but pressure is anomalously low
+                    alertCard.className = "bg-blue-900/30 border border-blue-500/50 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
+                    alertTitle.innerHTML = "🔵 NOTICE: LOW PRESSURE";
+                    alertTitle.className = "text-blue-400 font-bold text-lg mb-2 flex items-center gap-2";
+                    alertText.innerHTML = "GNSS is stable. <br><br><span class='text-blue-300'><b>Meteo-sensitive alert:</b> Significant atmospheric pressure drop detected. Risk of drowsiness, weakness, and joint pain.</span>";
+                } else if (currentPressure >= 767) {
+                    // NEW: Geomagnetic is stable, but pressure is anomalously high
+                    alertCard.className = "bg-blue-900/30 border border-blue-500/50 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
+                    alertTitle.innerHTML = "🔵 NOTICE: HIGH PRESSURE";
+                    alertTitle.className = "text-blue-400 font-bold text-lg mb-2 flex items-center gap-2";
+                    alertText.innerHTML = "GNSS is stable. <br><br><span class='text-blue-300'><b>Meteo-sensitive alert:</b> High atmospheric pressure. Risk of hypertension and reduced performance.</span>";
                 } else {
-                    kpCard.className = "bg-gray-800 rounded-lg p-5 border-l-4 border-green-500 shadow-lg";
+                    // TRULY STABLE
+                    alertCard.className = "bg-green-900/20 border border-green-500/30 rounded-lg p-5 shadow-lg relative overflow-hidden transition-colors duration-500";
                     alertTitle.innerHTML = "✅ STABLE";
                     alertTitle.className = "text-green-400 font-bold text-lg mb-2 flex items-center gap-2";
                     alertText.innerHTML = "Normal working conditions. GNSS is stable. <br><br><span class='text-green-300'><b>Meteo-sensitive alert:</b> Favorable conditions. No negative impact expected on well-being.</span>";
@@ -187,11 +207,11 @@
                     y: pressureValues,
                     name: 'Pressure (mmHg)', 
                     type: 'scatter', 
-                    mode: 'lines+markers', // Removed messy text labels from the line
+                    mode: 'lines+markers', 
                     line: { color: '#00d2ff', width: 2, shape: 'spline' }, 
                     marker: { size: 4 },
                     yaxis: 'y1',
-                    hovertemplate: '<b>%{x|%H:%M}</b><br>Pressure: %{y} mmHg<extra></extra>' // Time only, single popup
+                    hovertemplate: '<b>%{x|%H:%M}</b><br>Pressure: %{y} mmHg<extra></extra>' 
                 };
 
                 const traceKp = {
@@ -203,7 +223,7 @@
                     marker: { color: kpValues.map(v => v >= 5 ? '#ff4b4b' : v >= 4 ? '#ffa500' : '#00cc96') },
                     opacity: 0.8,
                     yaxis: 'y2',
-                    hovertemplate: '<b>%{x|%H:%M}</b><br>Kp-index: %{y}<extra></extra>' // Time only, single popup
+                    hovertemplate: '<b>%{x|%H:%M}</b><br>Kp-index: %{y}<extra></extra>' 
                 };
 
                 const layout = {
